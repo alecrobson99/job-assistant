@@ -36,6 +36,22 @@ npm run build
 2. Copy and run the SQL in `supabase/schema.sql`.
 3. In Supabase Auth settings for development, you can disable email confirmation.
 
+## AI Setup (Anthropic via Supabase Proxy)
+
+Do not call Anthropic directly from browser code. This app uses a Supabase Edge Function proxy.
+
+1. Set secret in Supabase:
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+```
+
+2. Deploy the proxy function:
+
+```bash
+supabase functions deploy anthropic-proxy
+```
+
 ## Stripe Subscription Setup
 
 1. In Supabase SQL Editor, run `supabase/billing.sql`.

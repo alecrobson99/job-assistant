@@ -317,26 +317,16 @@ function LandingPage({ onLogin }) {
 // APP UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════════
 async function callClaude(system, userMsg, maxTokens=1500) {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing VITE_ANTHROPIC_API_KEY in your .env file.");
-  }
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.functions.invoke("anthropic-proxy", {
+    body: {
+      system,
+      userMsg,
+      maxTokens,
+      model: "claude-sonnet-4-20250514",
     },
-    body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, system,
-      messages:[{role:"user",content:userMsg}] }),
   });
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    throw new Error(`Anthropic request failed (${res.status}). ${errBody || "Check API key/model."}`);
-  }
-  const data = await res.json();
+  if (error) throw error;
   if(data.error) throw new Error(data.error.message);
   return data.content.map(b=>b.text||"").join("");
 }
@@ -642,18 +632,23 @@ function FileUpBtn({onText,label="Upload .txt/.pdf"}){
     const file=e.target.files[0]; if(!file)return; setLoading(true);
     try{
       if(file.type==="application/pdf"){
-        const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-        if (!apiKey) throw new Error("Missing VITE_ANTHROPIC_API_KEY in your .env file.");
+        const supabase = getSupabaseClient();
         const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-        const d=await(await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{
-          "Content-Type":"application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:3000,messages:[{role:"user",content:[
-            {type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},
-            {type:"text",text:"Extract and return only the full plain text. No commentary."}
-          ]}]})})).json();
+        const { data: d, error } = await supabase.functions.invoke("anthropic-proxy", {
+          body: {
+            model: "claude-sonnet-4-20250514",
+            maxTokens: 3000,
+            messages: [{
+              role: "user",
+              content: [
+                { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } },
+                { type: "text", text: "Extract and return only the full plain text. No commentary." },
+              ],
+            }],
+          },
+        });
+        if (error) throw error;
+        if (d?.error) throw new Error(d.error);
         onText(d.content?.map(b=>b.text||"").join("")||"",file.name);
       }else{onText(await file.text(),file.name);}
     }catch(err){alert(err?.message || "Could not read file.");}
