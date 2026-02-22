@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { getSupabaseClient } from "./supabase";
 
 
@@ -36,6 +36,15 @@ const STATUS_META = {
   rejected:  { color: T.red,     bg: T.redBg,        border: T.redBorder,     label: "Rejected"  },
 };
 const STATUS_OPTIONS = ["saved","applied","interview","offer","rejected"];
+const PREMIUM_STATUSES = ["active", "trialing"];
+const BILLING_ENABLED = false;
+
+function hasPremiumAccess(subscription) {
+  if (!subscription) return false;
+  if (!PREMIUM_STATUSES.includes(subscription.status)) return false;
+  if (!subscription.current_period_end) return true;
+  return new Date(subscription.current_period_end) > new Date();
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LANDING PAGE
@@ -318,7 +327,27 @@ async function callClaude(system, userMsg, maxTokens=1500) {
   return data.content.map(b=>b.text||"").join("");
 }
 
-const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+const toISO = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
+const formatDate = (value) => {
+  const iso = toISO(value);
+  return iso ? iso.slice(0, 10) : "—";
+};
+
+const normalizeDoc = (doc) => ({
+  ...doc,
+  createdAt: doc.createdAt || doc.created_at || null,
+});
+
+const normalizeJob = (job) => ({
+  ...job,
+  savedAt: job.savedAt || job.saved_at || job.created_at || null,
+  keywords: Array.isArray(job.keywords) ? job.keywords : [],
+});
 
 async function getAuthContext() {
   const supabase = getSupabaseClient();
@@ -346,7 +375,7 @@ const store = {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data;
+    return (data || []).map(normalizeDoc);
   },
 
   setDocs: async () => {
@@ -366,7 +395,7 @@ const store = {
       .single();
   
     if (error) throw error;
-    return data;
+    return normalizeDoc(data);
   },
 
   updateDoc: async (id, updates) => {
@@ -380,7 +409,7 @@ const store = {
       .single();
 
     if (error) throw error;
-    return data;
+    return normalizeDoc(data);
   },
 
   deleteDoc: async (id) => {
@@ -404,7 +433,7 @@ const store = {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data;
+    return (data || []).map(normalizeJob);
   },
 
   insertJob: async (job) => {
@@ -419,7 +448,7 @@ const store = {
       .single();
 
     if (error) throw error;
-    return data;
+    return normalizeJob(data);
   },
 
   updateJob: async (id, updates) => {
@@ -433,7 +462,7 @@ const store = {
       .single();
 
     if (error) throw error;
-    return data;
+    return normalizeJob(data);
   },
 
   deleteJob: async (id) => {
@@ -477,12 +506,49 @@ const store = {
     if (error) throw error;
     return data;
   },
+
+  // BILLING
+  getSubscription: async () => {
+    const { supabase, user } = await getAuthContext();
+    const { data, error } = await supabase
+      .from("billing_subscriptions")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    // Keep app usable before billing.sql is applied.
+    if (error?.code === "42P01" || (error?.message || "").includes("billing_subscriptions")) return null;
+    if (error) throw error;
+    return data;
+  },
+};
+
+const billingApi = {
+  startCheckout: async () => {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+      body: {},
+    });
+    if (error) throw error;
+    if (!data?.url) throw new Error(data?.error || "Could not create checkout session.");
+    return data.url;
+  },
+
+  openPortal: async () => {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke("create-portal-session", {
+      body: {},
+    });
+    if (error) throw error;
+    if (!data?.url) throw new Error(data?.error || "Could not create billing portal session.");
+    return data.url;
+  },
 };
 function exportCSV(jobs,docs) {
   const hdrs=["Job Title","Company","Location","URL","Date Saved","Status","Notes","Resume Used","Cover Letter Used"];
   const rows=jobs.map(j=>{
     const res=docs.find(d=>d.id===j.resumeDocId); const cl=docs.find(d=>d.id===j.coverDocId);
-    return [j.title,j.company,j.location,j.url,j.savedAt?.slice(0,10),j.status,j.notes||"",res?.tag||"",cl?.tag||""]
+    return [j.title,j.company,j.location,j.url,formatDate(j.savedAt || j.created_at),j.status,j.notes||"",res?.tag||"",cl?.tag||""]
       .map(v=>`"${(v||"").replace(/"/g,'""')}"`).join(",");
   });
   const csv=[hdrs.join(","),...rows].join("\n");
@@ -493,9 +559,17 @@ function exportCSV(jobs,docs) {
 // ─── Design primitives ────────────────────────────────────────────────────────
 function FL({children}){return <div style={{fontSize:11,fontWeight:700,color:T.textMute,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>{children}</div>;}
 function Divider(){return <div style={{height:1,background:T.border,margin:"18px 0"}}/>;}
-function SH({icon,title}){return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{fontSize:16}}>{icon}</span><span style={{fontSize:14,fontWeight:700,color:T.text}}>{title}</span></div>;}
-function PH({title,subtitle,action}){return <div style={{padding:"28px 32px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}><div><h1 style={{margin:0,fontSize:21,fontWeight:800,color:T.text,letterSpacing:"-0.3px"}}>{title}</h1>{subtitle&&<p style={{margin:"4px 0 0",fontSize:13,color:T.textSub}}>{subtitle}</p>}</div>{action}</div>;}
-function Card({children,style:s}){return <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:20,...s}}>{children}</div>;}
+function SH({icon,title}){return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{fontSize:16}}>{icon}</span><span style={{fontSize:14,fontWeight:750,color:T.text}}>{title}</span></div>;}
+function PH({title,subtitle,action}){
+  return <div style={{padding:"30px 32px 8px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",flexShrink:0}}>
+    <div>
+      <h1 style={{margin:0,fontSize:23,fontWeight:850,color:T.text,letterSpacing:"-0.35px",lineHeight:1.15}}>{title}</h1>
+      {subtitle&&<p style={{margin:"7px 0 0",fontSize:13,color:T.textSub,lineHeight:1.55,maxWidth:520}}>{subtitle}</p>}
+    </div>
+    {action}
+  </div>;
+}
+function Card({children,style:s}){return <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:20,boxShadow:"0 8px 28px rgba(15,23,42,0.04)",...s}}>{children}</div>;}
 function Chip({label,color}){return <span style={{fontSize:12,fontWeight:600,color,background:color+"18",border:`1px solid ${color}30`,borderRadius:20,padding:"3px 11px"}}>{label}</span>;}
 
 function StatusBadge({status}){
@@ -505,35 +579,36 @@ function StatusBadge({status}){
 function Spinner({color=T.primary}){return <span style={{display:"inline-block",width:13,height:13,border:`2px solid ${color}30`,borderTopColor:color,borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}}/>;}
 
 function Btn({onClick,children,variant="primary",small,full,disabled,style:s}){
-  const base={cursor:disabled?"not-allowed":"pointer",borderRadius:8,fontWeight:600,transition:"opacity 0.15s",display:"inline-flex",alignItems:"center",gap:6,opacity:disabled?0.5:1,border:"none",fontFamily:"inherit"};
+  const base={cursor:disabled?"not-allowed":"pointer",borderRadius:10,fontWeight:650,transition:"opacity 0.15s, transform 0.15s",display:"inline-flex",alignItems:"center",gap:6,opacity:disabled?0.5:1,border:"none",fontFamily:"inherit",letterSpacing:"0.01em"};
   const v={
-    primary:{background:T.primary,color:"#fff",padding:small?"6px 14px":"9px 20px",fontSize:small?12:13},
-    secondary:{background:T.primaryLight,color:T.primary,padding:small?"6px 14px":"9px 20px",fontSize:small?12:13,border:`1px solid ${T.primaryMid}`},
-    ghost:{background:"transparent",color:T.textSub,padding:small?"5px 12px":"8px 16px",fontSize:small?12:13,border:`1px solid ${T.border}`},
-    danger:{background:T.redBg,color:T.red,padding:small?"6px 14px":"9px 20px",fontSize:small?12:13,border:`1px solid ${T.redBorder}`},
-    success:{background:T.greenBg,color:T.green,padding:small?"6px 14px":"9px 20px",fontSize:small?12:13,border:`1px solid ${T.greenBorder}`},
-    violet:{background:T.violetBg,color:T.violet,padding:small?"6px 14px":"9px 20px",fontSize:small?12:13,border:`1px solid ${T.violetBorder}`},
+    primary:{background:`linear-gradient(180deg,${T.primary} 0%,${T.primaryDark} 100%)`,color:"#fff",padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,boxShadow:"0 8px 20px rgba(59,111,232,0.26)"},
+    secondary:{background:T.primaryLight,color:T.primary,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.primaryMid}`},
+    ghost:{background:"transparent",color:T.textSub,padding:small?"6px 12px":"9px 16px",fontSize:small?12:13,border:`1px solid ${T.border}`},
+    danger:{background:T.redBg,color:T.red,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.redBorder}`},
+    success:{background:T.greenBg,color:T.green,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.greenBorder}`},
+    violet:{background:T.violetBg,color:T.violet,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.violetBorder}`},
   };
   return <button onClick={disabled?undefined:onClick} style={{...base,...v[variant],...(full?{width:"100%",justifyContent:"center"}:{}),...s}}>{children}</button>;
 }
 
-function AppInput({value,onChange,placeholder,type="text",style:s}){
+function AppInput({value,onChange,placeholder,type="text",style:s,...rest}){
   const [f,setF]=useState(false);
   return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} type={type}
     onFocus={()=>setF(true)} onBlur={()=>setF(false)}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:8,color:T.text,padding:"9px 13px",fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",transition:"border-color 0.15s",...s}}/>;
+    {...rest}
+    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
 }
 
 function TA({value,onChange,placeholder,rows=6,style:s}){
   const [f,setF]=useState(false);
   return <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
     onFocus={()=>setF(true)} onBlur={()=>setF(false)}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:8,color:T.text,padding:"10px 13px",fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.65,transition:"border-color 0.15s",...s}}/>;
+    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"11px 13px",fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.65,transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
 }
 
 function Sel({value,onChange,options,style:s}){
   return <select value={value} onChange={e=>onChange(e.target.value)}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:8,color:value?T.text:T.textMute,padding:"9px 13px",fontSize:13,fontFamily:"inherit",outline:"none",cursor:"pointer",...s}}>
+    style={{width:"100%",background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:10,color:value?T.text:T.textMute,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",cursor:"pointer",...s}}>
     {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
   </select>;
 }
@@ -576,40 +651,72 @@ function FileUpBtn({onText,label="Upload .txt/.pdf"}){
 function ProfileView({docs,setDocs,userName}){
   const [profile,setP]=useState({name:userName||""});
   const [savedMsg,setSavedMsg]=useState("");
-  useState(()=>{
-    store.getProfile().then(p=>{ if(p) setP(prev=>({...prev,...p})); }).catch(()=>{});
-  });
+  const [profileError,setProfileError]=useState("");
+  const [profileLoading,setProfileLoading]=useState(true);
+  const [savingProfile,setSavingProfile]=useState(false);
+  const [savingDoc,setSavingDoc]=useState(false);
+  const [docError,setDocError]=useState("");
   const [showDocForm,setShowDocForm]=useState(false);
   const [docType,setDocType]=useState("resume");
   const [docTag,setDocTag]=useState("");
   const [docContent,setDocContent]=useState("");
   const [editDocId,setEditDocId]=useState(null);
 
+  useEffect(()=>{
+    let mounted = true;
+    setProfileLoading(true);
+    store.getProfile()
+      .then((p)=>{ if(mounted && p) setP(prev=>({...prev,...p})); })
+      .catch(()=>{ if(mounted) setProfileError("Could not load profile data."); })
+      .finally(()=>{ if(mounted) setProfileLoading(false); });
+    return ()=>{ mounted = false; };
+  },[]);
+
   function up(k,v){setP(p=>({...p,[k]:v}));}
   async function save(){
-    try { await store.setProfile(profile); setSavedMsg("Saved!"); setTimeout(()=>setSavedMsg(""),2000); }
-    catch(e){ alert("Error saving profile: "+e.message); }
+    setSavingProfile(true);
+    setProfileError("");
+    try {
+      await store.setProfile(profile);
+      setSavedMsg("Saved!");
+      setTimeout(()=>setSavedMsg(""),2000);
+    } catch(e){
+      setProfileError(`Error saving profile: ${e.message}`);
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   async function saveDoc(){
     if(!docContent.trim()||!docTag.trim())return;
+    setSavingDoc(true);
+    setDocError("");
     try {
       if(editDocId){
-        await store.updateDoc(editDocId,{tag:docTag,content:docContent,type:docType});
-        setDocs(docs.map(d=>d.id===editDocId?{...d,tag:docTag,content:docContent,type:docType}:d));
+        const updated = await store.updateDoc(editDocId,{tag:docTag,content:docContent,type:docType});
+        setDocs(prev=>prev.map(d=>d.id===editDocId?updated:d));
       } else {
         const newDoc = await store.insertDoc({type:docType,tag:docTag,content:docContent});
-        setDocs([newDoc,...docs]);
+        setDocs(prev=>[newDoc,...prev]);
       }
       setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocType("resume");
-    } catch(e){ alert("Error saving document: "+e.message); }
+    } catch(e){
+      setDocError(`Error saving document: ${e.message}`);
+    } finally {
+      setSavingDoc(false);
+    }
   }
   function startEdit(doc){setEditDocId(doc.id);setDocType(doc.type);setDocTag(doc.tag);setDocContent(doc.content);setShowDocForm(true);}
   async function delDoc(id){
-    try { await store.deleteDoc(id); setDocs(docs.filter(d=>d.id!==id)); }
-    catch(e){ alert("Error deleting document: "+e.message); }
+    setDocError("");
+    try {
+      await store.deleteDoc(id);
+      setDocs(prev=>prev.filter(d=>d.id!==id));
+    } catch(e){
+      setDocError(`Error deleting document: ${e.message}`);
+    }
   }
-  function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");}
+  function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocError("");}
 
   const F=({lbl,k,ph,type="text"})=><div style={{marginBottom:14}}><FL>{lbl}</FL><AppInput value={profile[k]||""} onChange={v=>up(k,v)} placeholder={ph} type={type}/></div>;
   const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
@@ -622,7 +729,9 @@ function ProfileView({docs,setDocs,userName}){
           <p style={{margin:"4px 0 0",fontSize:13,color:T.textSub}}>Personal info, job preferences, and documents</p>
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:18}}>
+        {profileError&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}>{profileError}</div>}
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:18,marginBottom:18,opacity:profileLoading?0.65:1}}>
           <Card>
             <SH icon="👤" title="Personal Info"/>
             <F lbl="Full Name" k="name" ph="Jane Smith"/><F lbl="Email" k="email" ph="jane@example.com" type="email"/>
@@ -647,7 +756,7 @@ function ProfileView({docs,setDocs,userName}){
             <Toggle checked={!!profile.useCompanyPrefs} onChange={v=>up("useCompanyPrefs",v)}
               label={profile.useCompanyPrefs?"Applied to search":"Off"}/>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14}}>
             <div><FL>Target Companies</FL>
               <TA value={profile.targetCompanies||""} onChange={v=>up("targetCompanies",v)}
                 placeholder="e.g. Stripe, Notion, Series B startups..." rows={3}/>
@@ -660,13 +769,19 @@ function ProfileView({docs,setDocs,userName}){
           {!profile.useCompanyPrefs&&<div style={{marginTop:10,fontSize:12,color:T.textMute,background:T.bg,borderRadius:8,padding:"8px 12px",border:`1px solid ${T.border}`}}>💡 Toggle on to include these preferences in searches and suggestions.</div>}
         </Card>
 
-        <div style={{marginBottom:24}}><Btn onClick={save} variant={savedMsg?"success":"primary"}>{savedMsg?"✓ "+savedMsg:"Save All Preferences"}</Btn></div>
+        <div style={{marginBottom:24}}>
+          <Btn onClick={save} variant={savedMsg?"success":"primary"} disabled={savingProfile || profileLoading}>
+            {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save All Preferences"}
+          </Btn>
+        </div>
 
         <Card>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <SH icon="📄" title="My Documents"/>
             <Btn onClick={()=>{setShowDocForm(v=>!v);if(showDocForm)cancelDoc();}} variant="secondary" small>{showDocForm?"Cancel":"+ Add Document"}</Btn>
           </div>
+
+          {docError&&<div style={{fontSize:12,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"8px 12px",marginBottom:12}}>{docError}</div>}
 
           {showDocForm&&(
             <div style={{background:T.primaryLight,border:`1px solid ${T.primaryMid}`,borderRadius:10,padding:16,marginBottom:16}}>
@@ -680,8 +795,10 @@ function ProfileView({docs,setDocs,userName}){
               <FL>Document Text</FL>
               <TA value={docContent} onChange={setDocContent} placeholder="Paste text here..." rows={8}/>
               <div style={{marginTop:12,display:"flex",gap:8}}>
-                <Btn onClick={saveDoc}>{editDocId?"Update":"Save Document"}</Btn>
-                <Btn onClick={cancelDoc} variant="ghost">Cancel</Btn>
+                <Btn onClick={saveDoc} disabled={savingDoc}>
+                  {savingDoc ? <><Spinner color="#fff"/> Saving…</> : editDocId?"Update":"Save Document"}
+                </Btn>
+                <Btn onClick={cancelDoc} variant="ghost" disabled={savingDoc}>Cancel</Btn>
               </div>
             </div>
           )}
@@ -698,7 +815,7 @@ function ProfileView({docs,setDocs,userName}){
                         <div style={{display:"flex",gap:4}}><Btn onClick={()=>startEdit(doc)} variant="ghost" small>Edit</Btn><Btn onClick={()=>delDoc(doc.id)} variant="danger" small>✕</Btn></div>
                       </div>
                       <div style={{fontSize:11,color:T.textMute,lineHeight:1.5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{doc.content.slice(0,120)}…</div>
-                      <div style={{fontSize:10,color:T.textMute,marginTop:6}}>{doc.createdAt?.slice(0,10)}</div>
+                      <div style={{fontSize:10,color:T.textMute,marginTop:6}}>{formatDate(doc.createdAt || doc.created_at)}</div>
                     </div>
                   ))}
                 </div>}
@@ -719,7 +836,8 @@ function SuggestedView({docs,jobs,setJobs}){
   const [error,setError]=useState("");
   const [generated,setGenerated]=useState(false);
   const [profile,setProfile]=useState({});
-  useState(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); });
+  const [savingRoleKey,setSavingRoleKey]=useState("");
+  useEffect(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); },[]);
   const resume=docs.find(d=>d.type==="resume");
 
   async function generate(){
@@ -737,10 +855,13 @@ function SuggestedView({docs,jobs,setJobs}){
 
   async function saveRole(role){
     if(jobs.find(j=>j.title===role.title&&j.company==="(Suggested Role)"))return;
+    const roleKey = `${role.title}::${role.category || ""}`;
+    setSavingRoleKey(roleKey);
     try{
       const saved=await store.insertJob({title:role.title,company:"(Suggested Role)",location:"",url:"",description:role.whyFit,status:"saved",notes:""});
       setJobs(prev=>[saved,...prev]);
-    }catch(e){alert("Error saving role: "+e.message);}
+    }catch(e){setError(`Error saving role: ${e.message}`);}
+    finally{setSavingRoleKey("");}
   }
 
   const gc=g=>g==="High"?T.green:g==="Medium"?T.amber:T.textMute;
@@ -750,7 +871,7 @@ function SuggestedView({docs,jobs,setJobs}){
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
       <PH title="Suggested Roles" subtitle="AI-powered role suggestions based on your profile"
         action={<Btn onClick={generate} disabled={loading}>{loading?<><Spinner color="#fff"/> Analyzing…</>:generated?"↺ Regenerate":"✨ Generate Suggestions"}</Btn>}/>
-      <div style={{padding:"18px 32px"}}>
+      <div style={{padding:"18px 32px 30px",maxWidth:1180,margin:"0 auto"}}>
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
           {profile.targetTitle&&<Chip label={"🎯 "+profile.targetTitle} color={T.primary}/>}
           {profile.industry&&<Chip label={"🏭 "+profile.industry} color={T.teal}/>}
@@ -772,6 +893,8 @@ function SuggestedView({docs,jobs,setJobs}){
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
           {roles.map((role,i)=>{
             const saved=jobs.find(j=>j.title===role.title&&j.company==="(Suggested Role)");
+            const roleKey = `${role.title}::${role.category || ""}`;
+            const saving = savingRoleKey === roleKey;
             return(
               <Card key={i} style={{display:"flex",flexDirection:"column"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
@@ -796,7 +919,9 @@ function SuggestedView({docs,jobs,setJobs}){
                   </div>
                 </div>
                 <div style={{marginTop:"auto",paddingTop:10,borderTop:`1px solid ${T.border}`}}>
-                  <Btn onClick={()=>saveRole(role)} variant={saved?"success":"secondary"} small full>{saved?"✓ Added to Tracker":"+ Add to Tracker"}</Btn>
+                  <Btn onClick={()=>saveRole(role)} disabled={saving || saved} variant={saved?"success":"secondary"} small full>
+                    {saving ? <><Spinner/> Saving…</> : saved?"✓ Added to Tracker":"+ Add to Tracker"}
+                  </Btn>
                 </div>
               </Card>
             );
@@ -810,14 +935,15 @@ function SuggestedView({docs,jobs,setJobs}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // JOB SEARCH VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function SearchView({docs,jobs,setJobs}){
+function SearchView({jobs,setJobs}){
   const [query,setQuery]=useState("");
   const [results,setResults]=useState([]);
   const [loading,setLoading]=useState(false);
   const [parsed,setParsed]=useState(null);
   const [error,setError]=useState("");
   const [profile,setProfile]=useState({});
-  useState(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); });
+  const [savingJobKey,setSavingJobKey]=useState("");
+  useEffect(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); },[]);
 
   async function search(){
     if(!query.trim())return;
@@ -836,23 +962,27 @@ function SearchView({docs,jobs,setJobs}){
 
   async function saveJob(job){
     if(jobs.find(j=>j.title===job.title&&j.company===job.company))return;
+    const jobKey = `${job.title}::${job.company}`;
+    setSavingJobKey(jobKey);
     try{
       const saved=await store.insertJob({...job,status:"saved",notes:""});
       setJobs(prev=>[saved,...prev]);
-    }catch(e){alert("Error saving job: "+e.message);}
+    }catch(e){setError(`Error saving job: ${e.message}`);}
+    finally{setSavingJobKey("");}
   }
 
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
       <PH title="Job Search" subtitle="Describe your ideal role in plain English"/>
-      <div style={{padding:"18px 32px"}}>
+      <div style={{padding:"18px 32px 30px",maxWidth:1180,margin:"0 auto"}}>
         {profile.useCompanyPrefs&&(profile.targetCompanies||profile.lifestyleVibe)&&(
           <div style={{fontSize:12,color:T.violet,background:T.violetBg,border:`1px solid ${T.violetBorder}`,borderRadius:8,padding:"8px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
             <span>✦</span><span><strong>Profile preferences active:</strong> company type and culture vibe are included in your search.</span>
           </div>
         )}
         <div style={{display:"flex",gap:10,marginBottom:18}}>
-          <AppInput value={query} onChange={setQuery} placeholder='e.g. "Remote senior product designer at a fintech startup"' style={{flex:1}}/>
+          <AppInput value={query} onChange={setQuery} placeholder='e.g. "Remote senior product designer at a fintech startup"' style={{flex:1}}
+            onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
           <Btn onClick={search} disabled={loading}>{loading?<><Spinner color="#fff"/> Searching…</>:"Search"}</Btn>
         </div>
         {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:16}}>{error}</div>}
@@ -869,6 +999,8 @@ function SearchView({docs,jobs,setJobs}){
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
           {results.map((job,i)=>{
             const isSaved=jobs.find(j=>j.title===job.title&&j.company===job.company);
+            const jobKey = `${job.title}::${job.company}`;
+            const saving = savingJobKey === jobKey;
             return(
               <Card key={i}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -877,7 +1009,9 @@ function SearchView({docs,jobs,setJobs}){
                     <div style={{fontSize:12,color:T.primary,fontWeight:600}}>{job.company}</div>
                     <div style={{fontSize:11,color:T.textMute,marginTop:2}}>{job.location}</div>
                   </div>
-                  <Btn onClick={()=>saveJob(job)} variant={isSaved?"success":"secondary"} small>{isSaved?"✓ Saved":"+ Save"}</Btn>
+                  <Btn onClick={()=>saveJob(job)} disabled={isSaved || saving} variant={isSaved?"success":"secondary"} small>
+                    {saving ? <><Spinner/> Saving…</> : isSaved?"✓ Saved":"+ Save"}
+                  </Btn>
                 </div>
                 <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>{job.description}</div>
               </Card>
@@ -898,13 +1032,56 @@ function TrackerView({jobs,setJobs,docs}){
   const [editingNoteId,setEditingNoteId]=useState(null);
   const [filterStatus,setFilterStatus]=useState("all");
   const [sortBy,setSortBy]=useState("date");
+  const [trackerMsg,setTrackerMsg]=useState("");
+  const [trackerErr,setTrackerErr]=useState("");
 
-  async function updateStatus(id,status){const u=jobs.map(j=>j.id===id?{...j,status}:j);setJobs(u);try{await store.updateJob(id,{status});}catch(e){console.error(e);}}
-  async function saveNotes(id){const u=jobs.map(j=>j.id===id?{...j,notes:editNotes}:j);setJobs(u);try{await store.updateJob(id,{notes:editNotes});}catch(e){console.error(e);}setEditingNoteId(null);}
-  async function deleteJob(id){const u=jobs.filter(j=>j.id!==id);setJobs(u);try{await store.deleteJob(id);}catch(e){console.error(e);}if(openId===id)setOpenId(null);}
+  async function updateStatus(id,status){
+    setTrackerErr("");
+    const prev = jobs;
+    const u=jobs.map(j=>j.id===id?{...j,status}:j);
+    setJobs(u);
+    try{
+      await store.updateJob(id,{status});
+    }catch(e){
+      setJobs(prev);
+      setTrackerErr(`Could not update status: ${e.message}`);
+    }
+  }
+  async function saveNotes(id){
+    setTrackerErr("");
+    const prev = jobs;
+    const u=jobs.map(j=>j.id===id?{...j,notes:editNotes}:j);
+    setJobs(u);
+    try{
+      await store.updateJob(id,{notes:editNotes});
+      setTrackerMsg("Notes saved.");
+      setTimeout(()=>setTrackerMsg(""),1500);
+    }catch(e){
+      setJobs(prev);
+      setTrackerErr(`Could not save notes: ${e.message}`);
+    }
+    setEditingNoteId(null);
+  }
+  async function deleteJob(id){
+    setTrackerErr("");
+    const prev = jobs;
+    const u=jobs.filter(j=>j.id!==id);
+    setJobs(u);
+    try{
+      await store.deleteJob(id);
+    }catch(e){
+      setJobs(prev);
+      setTrackerErr(`Could not delete job: ${e.message}`);
+    }
+    if(openId===id)setOpenId(null);
+  }
 
   const filtered=jobs.filter(j=>filterStatus==="all"||j.status===filterStatus).sort((a,b)=>{
-    if(sortBy==="date")return new Date(b.savedAt)-new Date(a.savedAt);
+    if(sortBy==="date"){
+      const bDate = toISO(b.savedAt || b.created_at) || "";
+      const aDate = toISO(a.savedAt || a.created_at) || "";
+      return bDate.localeCompare(aDate);
+    }
     if(sortBy==="company")return(a.company||"").localeCompare(b.company||"");
     return(a.title||"").localeCompare(b.title||"");
   });
@@ -915,7 +1092,7 @@ function TrackerView({jobs,setJobs,docs}){
       <PH title="Application Tracker" subtitle={`${jobs.length} application${jobs.length!==1?"s":""} tracked`}
         action={<Btn onClick={()=>exportCSV(jobs,docs)} variant="ghost">↓ Export CSV</Btn>}/>
 
-      <div style={{padding:"14px 32px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0}}>
+      <div style={{padding:"14px 32px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0,maxWidth:1180,margin:"0 auto",width:"100%"}}>
         {[["all",`All (${jobs.length})`],...STATUS_OPTIONS.map(s=>[s,`${STATUS_META[s].label} (${counts[s]||0})`])].map(([val,lbl])=>(
           <button key={val} onClick={()=>setFilterStatus(val)} style={{
             padding:"5px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,transition:"all 0.12s",
@@ -932,7 +1109,22 @@ function TrackerView({jobs,setJobs,docs}){
         </div>
       </div>
 
-      <div style={{flex:1,overflow:"auto",padding:"12px 32px 24px"}}>
+      {(trackerErr || trackerMsg) && (
+        <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
+          <div style={{
+            fontSize:12,
+            borderRadius:8,
+            padding:"8px 12px",
+            border:`1px solid ${trackerErr ? T.redBorder : T.greenBorder}`,
+            background:trackerErr ? T.redBg : T.greenBg,
+            color:trackerErr ? T.red : T.green,
+          }}>
+            {trackerErr || trackerMsg}
+          </div>
+        </div>
+      )}
+
+      <div style={{flex:1,overflow:"auto",padding:"12px 32px 24px",maxWidth:1180,margin:"0 auto",width:"100%"}}>
         {filtered.length===0&&(
           <div style={{textAlign:"center",padding:"60px 0",color:T.textMute}}>
             <div style={{fontSize:36,marginBottom:10}}>📭</div>
@@ -963,7 +1155,7 @@ function TrackerView({jobs,setJobs,docs}){
                     </div>
                     <div style={{fontSize:13,color:T.primary,fontWeight:500}}>{job.company||"—"}</div>
                     <div style={{fontSize:12,color:T.textSub}}>{job.location||"—"}</div>
-                    <div style={{fontSize:12,color:T.textMute}}>{job.savedAt?.slice(0,10)||"—"}</div>
+                    <div style={{fontSize:12,color:T.textMute}}>{formatDate(job.savedAt || job.created_at)}</div>
                     <div onClick={e=>e.stopPropagation()}>
                       <Sel value={job.status} onChange={v=>updateStatus(job.id,v)}
                         options={STATUS_OPTIONS.map(s=>({value:s,label:STATUS_META[s].label}))}
@@ -1024,7 +1216,7 @@ function TrackerView({jobs,setJobs,docs}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAILOR VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function TailorView({docs,jobs,setJobs}){
+function TailorView({docs,jobs,setJobs,hasPremium,onUpgrade,billingLoading}){
   const [resumeId,setResumeId]=useState("");
   const [coverId,setCoverId]=useState("");
   const [jobId,setJobId]=useState("");
@@ -1032,6 +1224,25 @@ function TailorView({docs,jobs,setJobs}){
   const [result,setResult]=useState(null);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
+
+  if (!hasPremium) {
+    return (
+      <div style={{flex:1,overflow:"auto",background:T.bg}}>
+        <PH title="Tailor AI" subtitle="Premium feature"/>
+        <div style={{padding:"18px 32px",maxWidth:760}}>
+          <Card style={{border:`1px solid ${T.violetBorder}`,background:`linear-gradient(135deg,${T.surface} 0%,${T.violetBg} 100%)`}}>
+            <div style={{fontSize:15,fontWeight:800,color:T.text,marginBottom:8}}>Unlock Tailor AI</div>
+            <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:16}}>
+              Tailor AI generates targeted resume summaries, cover letters, and keyword alignment for each role.
+            </div>
+            <Btn onClick={onUpgrade} disabled={billingLoading}>
+              {billingLoading ? <><Spinner color="#fff"/> Opening checkout…</> : "Upgrade to Pro"}
+            </Btn>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
   function onJobSel(id){setJobId(id);const j=jobs.find(x=>x.id===id);if(j?.description)setJd(j.description);}
@@ -1050,7 +1261,7 @@ function TailorView({docs,jobs,setJobs}){
       const data=JSON.parse(raw.replace(/```json|```/g,"").trim());setResult(data);
       if(jobId){
         const updates={tailoredResume:data.tailored_resume_summary,tailoredCover:data.tailored_cover_letter,keywords:data.keyword_alignment,matchScore:data.match_score,resumeDocId:resumeId,coverDocId:coverId};
-        setJobs(jobs.map(j=>j.id===jobId?{...j,...updates}:j));
+        setJobs(prev=>prev.map(j=>j.id===jobId?{...j,...updates}:j));
         try{await store.updateJob(jobId,updates);}catch(e){console.error(e);}
       }
     }catch{setError("Tailoring failed. Try again.");}
@@ -1062,7 +1273,7 @@ function TailorView({docs,jobs,setJobs}){
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
       <PH title="Tailor AI" subtitle="Customize your documents to match any job listing"/>
-      <div style={{padding:"18px 32px",display:"flex",gap:20,flexWrap:"wrap"}}>
+      <div style={{padding:"18px 32px 30px",display:"flex",gap:20,flexWrap:"wrap",maxWidth:1180,margin:"0 auto"}}>
         <div style={{flex:"1 1 320px",minWidth:0}}>
           <Card>
             <SH icon="1️⃣" title="Select documents"/>
@@ -1127,60 +1338,105 @@ function TailorView({docs,jobs,setJobs}){
   );
 }
 
+function BillingView({subscription,hasPremium,onCheckout,onPortal,onRefresh,loading}){
+  const status = subscription?.status || "inactive";
+  const renewalDate = subscription?.current_period_end
+    ? new Date(subscription.current_period_end).toLocaleDateString()
+    : null;
+
+  return (
+    <div style={{flex:1,overflow:"auto",background:T.bg}}>
+      <PH title="Billing" subtitle="Manage your subscription"/>
+      <div style={{padding:"18px 32px",maxWidth:760,display:"grid",gap:16}}>
+        <Card style={{borderColor:hasPremium?T.greenBorder:T.violetBorder}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:15,fontWeight:800,color:T.text}}>
+              {hasPremium ? "Pro Plan Active" : "Free Plan"}
+            </div>
+            <StatusBadge status={hasPremium ? "offer" : "saved"} />
+          </div>
+          <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:14}}>
+            Current status: <strong style={{color:T.text}}>{status}</strong>
+            {renewalDate ? <> · Renews on <strong style={{color:T.text}}>{renewalDate}</strong></> : null}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {!hasPremium && (
+              <Btn onClick={onCheckout} disabled={loading}>
+                {loading ? <><Spinner color="#fff"/> Opening checkout…</> : "Upgrade to Pro"}
+              </Btn>
+            )}
+            {subscription?.stripe_customer_id && (
+              <Btn onClick={onPortal} variant="secondary" disabled={loading}>
+                {loading ? <><Spinner/> Opening portal…</> : "Manage Subscription"}
+              </Btn>
+            )}
+            <Btn onClick={onRefresh} variant="ghost" disabled={loading}>Refresh Status</Btn>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIDEBAR + APP SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
-function AppShell({docs,setDocs,jobs,setJobs,userName,onLogout}){
+function AppShell({
+  docs,setDocs,jobs,setJobs,userName,onLogout,
+  subscription,hasPremium,onCheckout,onPortal,onRefreshBilling,billingLoading,
+}){
   const [active,setActive]=useState("profile");
   const nav=[
     {id:"profile",   icon:"👤", label:"Profile"},
     {id:"suggested", icon:"🧭", label:"Suggested Roles"},
     {id:"search",    icon:"🔍", label:"Job Search"},
     {id:"tracker",   icon:"📊", label:"Tracker"},
-    {id:"tailor",    icon:"✨", label:"Tailor AI"},
+    {id:"tailor",    icon:hasPremium?"✨":"🔒", label:"Tailor AI"},
   ];
+  if (BILLING_ENABLED) nav.push({id:"billing", icon:"💳", label:"Billing"});
 
   const views={
     profile:   <ProfileView   docs={docs} setDocs={setDocs} userName={userName}/>,
     suggested: <SuggestedView docs={docs} jobs={jobs} setJobs={setJobs}/>,
     search:    <SearchView    docs={docs} jobs={jobs} setJobs={setJobs}/>,
     tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs}/>,
-    tailor:    <TailorView    docs={docs} jobs={jobs} setJobs={setJobs}/>,
+    tailor:    <TailorView    docs={docs} jobs={jobs} setJobs={setJobs} hasPremium={hasPremium} onUpgrade={onCheckout} billingLoading={billingLoading}/>,
+    ...(BILLING_ENABLED ? { billing: <BillingView subscription={subscription} hasPremium={hasPremium} onCheckout={onCheckout} onPortal={onPortal} onRefresh={onRefreshBilling} loading={billingLoading}/> } : {}),
   };
 
   return(
     <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-      <aside style={{width:190,background:T.surface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,padding:"16px 10px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 8px 16px",marginBottom:6,borderBottom:`1px solid ${T.border}`}}>
-          <div style={{width:30,height:30,borderRadius:8,flexShrink:0,background:`linear-gradient(135deg,${T.primary},#0891b2)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff"}}>J</div>
-          <div style={{fontSize:13,fontWeight:800,color:T.text,lineHeight:1.25}}>Job<br/>Assistant</div>
+      <aside style={{width:224,background:`linear-gradient(180deg,${T.surface} 0%,#F8FAFF 100%)`,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,padding:"18px 12px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 10px 16px",marginBottom:8,borderBottom:`1px solid ${T.border}`}}>
+          <div style={{width:32,height:32,borderRadius:10,flexShrink:0,background:`linear-gradient(135deg,${T.primary},#0891b2)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",boxShadow:"0 10px 18px rgba(59,111,232,0.28)"}}>J</div>
+          <div style={{fontSize:13,fontWeight:800,color:T.text,lineHeight:1.2,letterSpacing:"0.01em"}}>Job<br/>Assistant</div>
         </div>
-        <nav style={{display:"flex",flexDirection:"column",gap:2,marginTop:2,flex:1}}>
+        <nav style={{display:"flex",flexDirection:"column",gap:4,marginTop:6,flex:1}}>
           {nav.map(n=>(
             <button key={n.id} onClick={()=>setActive(n.id)} style={{
-              display:"flex",alignItems:"center",gap:9,padding:"9px 10px",borderRadius:8,border:"none",
+              display:"flex",alignItems:"center",gap:10,padding:"10px 11px",borderRadius:10,border:"none",
               cursor:"pointer",width:"100%",background:active===n.id?T.primaryLight:"transparent",
               color:active===n.id?T.primary:T.textSub,fontFamily:"inherit",fontSize:13,
-              fontWeight:active===n.id?700:500,transition:"all 0.12s",textAlign:"left"
+              fontWeight:active===n.id?700:560,transition:"all 0.12s",textAlign:"left"
             }}>
-              <span style={{fontSize:15,flexShrink:0}}>{n.icon}</span>
+              <span style={{fontSize:15,flexShrink:0,width:22,height:22,display:"grid",placeItems:"center",background:active===n.id?"#FFFFFF":"transparent",borderRadius:7,border:active===n.id?`1px solid ${T.primaryMid}`:"1px solid transparent"}}>{n.icon}</span>
               <span style={{flex:1}}>{n.label}</span>
-              {active===n.id&&<div style={{width:5,height:5,borderRadius:"50%",background:T.primary,flexShrink:0}}/>}
+              {active===n.id&&<div style={{width:6,height:6,borderRadius:"50%",background:T.primary,flexShrink:0}}/>}
             </button>
           ))}
         </nav>
-        <div style={{borderTop:`1px solid ${T.border}`,paddingTop:12,marginTop:4}}>
-          <div style={{fontSize:12,color:T.textMute,padding:"4px 10px 8px",fontWeight:500}}>
-            👋 {userName}
+        <div style={{borderTop:`1px solid ${T.border}`,paddingTop:12,marginTop:6}}>
+          <div style={{fontSize:12,color:T.textSub,padding:"5px 10px 9px",fontWeight:600}}>
+            Signed in as {userName}
           </div>
-          <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",width:"100%",background:"transparent",color:T.textMute,fontFamily:"inherit",fontSize:12,fontWeight:500,transition:"all 0.12s",textAlign:"left"}}
+          <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 10px",borderRadius:10,border:"none",cursor:"pointer",width:"100%",background:"transparent",color:T.textMute,fontFamily:"inherit",fontSize:12,fontWeight:600,transition:"all 0.12s",textAlign:"left"}}
             onMouseEnter={e=>{e.currentTarget.style.background=T.redBg;e.currentTarget.style.color=T.red;}}
             onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMute;}}>
             <span style={{fontSize:14}}>→</span> Sign out
           </button>
         </div>
       </aside>
-      <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
+      <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:`radial-gradient(circle at 0% 0%,#FFFFFF 0%,${T.bg} 55%)`}}>
         {views[active]}
       </main>
     </div>
@@ -1192,16 +1448,121 @@ function AppShell({docs,setDocs,jobs,setJobs,userName,onLogout}){
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App(){
   const [loggedIn,setLoggedIn]=useState(false);
+  const [bootstrappingAuth,setBootstrappingAuth]=useState(true);
   const [userName,setUserName]=useState("");
   const [docs,setDocs]=useState([]);
   const [jobs,setJobs]=useState([]);
+  const [subscription,setSubscription]=useState(null);
+  const [billingLoading,setBillingLoading]=useState(false);
 
   // Load data from Supabase after login
   async function loadData(){
     try{
-      const [d,j]=await Promise.all([store.getDocs(),store.getJobs()]);
-      setDocs(d||[]); setJobs(j||[]);
+      const [d,j,s]=await Promise.all([
+        store.getDocs(),
+        store.getJobs(),
+        BILLING_ENABLED ? store.getSubscription() : Promise.resolve(null),
+      ]);
+      setDocs(d||[]); setJobs(j||[]); setSubscription(s||null);
     }catch(e){console.error("Error loading data:",e);}
+  }
+
+  async function refreshBilling() {
+    if (!BILLING_ENABLED) return;
+    setBillingLoading(true);
+    try {
+      const s = await store.getSubscription();
+      setSubscription(s || null);
+    } catch (e) {
+      console.error("Error loading billing state:", e);
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function startCheckout() {
+    if (!BILLING_ENABLED) return;
+    setBillingLoading(true);
+    try {
+      const url = await billingApi.startCheckout();
+      window.location.assign(url);
+    } catch (e) {
+      alert(`Could not open checkout: ${e.message || e}`);
+      setBillingLoading(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    if (!BILLING_ENABLED) return;
+    setBillingLoading(true);
+    try {
+      const url = await billingApi.openPortal();
+      window.location.assign(url);
+    } catch (e) {
+      alert(`Could not open billing portal: ${e.message || e}`);
+      setBillingLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function bootstrapAuth() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase.auth.getUser();
+        if (error) throw error;
+
+        if (mounted && data.user) {
+          const displayName =
+            data.user.user_metadata?.full_name ||
+            data.user.user_metadata?.name ||
+            data.user.email?.split("@")[0] ||
+            "";
+
+          setUserName(displayName);
+          setLoggedIn(true);
+          await loadData();
+        }
+      } catch (e) {
+        console.error("Error restoring auth session:", e);
+      } finally {
+        if (mounted) setBootstrappingAuth(false);
+      }
+    }
+
+    bootstrapAuth();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function handleLogout() {
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Error signing out:", e);
+    } finally {
+      setDocs([]);
+      setJobs([]);
+      setSubscription(null);
+      setBillingLoading(false);
+      setUserName("");
+      setLoggedIn(false);
+      setBootstrappingAuth(false);
+    }
+  }
+
+  if (bootstrappingAuth) {
+    return (
+      <div style={{minHeight:"100vh",display:"grid",placeItems:"center",background:T.bg,color:T.textSub,fontFamily:"DM Sans, system-ui, sans-serif"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,fontSize:14,fontWeight:600}}>
+          <Spinner /> Loading your workspace...
+        </div>
+      </div>
+    );
   }
 
   if(!loggedIn){
@@ -1217,7 +1578,11 @@ export default function App(){
           @keyframes slideInRight{from{opacity:0;transform:translateX(40px);}to{opacity:1;transform:translateX(0);}}
           @keyframes spin{to{transform:rotate(360deg);}}
         `}</style>
-        <LandingPage onLogin={(name)=>{setUserName(name);setLoggedIn(true);loadData();}}/>
+        <LandingPage onLogin={async (name)=>{
+          setUserName(name);
+          setLoggedIn(true);
+          await loadData();
+        }}/>
       </>
     );
   }
@@ -1235,10 +1600,22 @@ export default function App(){
         select option{background:${T.surface};color:${T.text};}
         button,input,textarea,select{font-family:'DM Sans',system-ui,sans-serif;}
         a{color:${T.primary};}
-        button:not(:disabled):hover{opacity:0.86;}
+        button:not(:disabled):hover{opacity:0.9;transform:translateY(-1px);}
+        button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{
+          outline:2px solid ${T.primaryMid};
+          outline-offset:2px;
+        }
       `}</style>
       <AppShell docs={docs} setDocs={setDocs} jobs={jobs} setJobs={setJobs}
-        userName={userName} onLogout={()=>setLoggedIn(false)}/>
+        userName={userName}
+        onLogout={handleLogout}
+        subscription={subscription}
+        hasPremium={!BILLING_ENABLED || hasPremiumAccess(subscription)}
+        onCheckout={startCheckout}
+        onPortal={openBillingPortal}
+        onRefreshBilling={refreshBilling}
+        billingLoading={billingLoading}
+      />
     </>
   );
 }
