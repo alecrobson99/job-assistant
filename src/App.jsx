@@ -317,11 +317,25 @@ function LandingPage({ onLogin }) {
 // APP UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════════
 async function callClaude(system, userMsg, maxTokens=1500) {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing VITE_ANTHROPIC_API_KEY in your .env file.");
+  }
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST", headers:{"Content-Type":"application/json"},
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
     body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, system,
       messages:[{role:"user",content:userMsg}] }),
   });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`Anthropic request failed (${res.status}). ${errBody || "Check API key/model."}`);
+  }
   const data = await res.json();
   if(data.error) throw new Error(data.error.message);
   return data.content.map(b=>b.text||"").join("");
@@ -628,15 +642,21 @@ function FileUpBtn({onText,label="Upload .txt/.pdf"}){
     const file=e.target.files[0]; if(!file)return; setLoading(true);
     try{
       if(file.type==="application/pdf"){
+        const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+        if (!apiKey) throw new Error("Missing VITE_ANTHROPIC_API_KEY in your .env file.");
         const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-        const d=await(await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+        const d=await(await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{
+          "Content-Type":"application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
           body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:3000,messages:[{role:"user",content:[
             {type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},
             {type:"text",text:"Extract and return only the full plain text. No commentary."}
           ]}]})})).json();
         onText(d.content?.map(b=>b.text||"").join("")||"",file.name);
       }else{onText(await file.text(),file.name);}
-    }catch{alert("Could not read file.");}
+    }catch(err){alert(err?.message || "Could not read file.");}
     setLoading(false); e.target.value="";
   }
   return <><input ref={ref} type="file" accept=".txt,.pdf" onChange={handle} style={{display:"none"}}/>
@@ -718,7 +738,12 @@ function ProfileView({docs,setDocs,userName}){
   }
   function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocError("");}
 
-  const F=({lbl,k,ph,type="text"})=><div style={{marginBottom:14}}><FL>{lbl}</FL><AppInput value={profile[k]||""} onChange={v=>up(k,v)} placeholder={ph} type={type}/></div>;
+  const renderField=(lbl,k,ph,type="text")=>(
+    <div style={{marginBottom:14}}>
+      <FL>{lbl}</FL>
+      <AppInput value={profile[k]||""} onChange={v=>up(k,v)} placeholder={ph} type={type}/>
+    </div>
+  );
   const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
 
   return(
@@ -734,16 +759,18 @@ function ProfileView({docs,setDocs,userName}){
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:18,marginBottom:18,opacity:profileLoading?0.65:1}}>
           <Card>
             <SH icon="👤" title="Personal Info"/>
-            <F lbl="Full Name" k="name" ph="Jane Smith"/><F lbl="Email" k="email" ph="jane@example.com" type="email"/>
-            <F lbl="LinkedIn URL" k="linkedin" ph="https://linkedin.com/in/jane"/>
-            <F lbl="Location" k="location" ph="San Francisco, CA"/><F lbl="Phone" k="phone" ph="+1 (555) 000-0000" type="tel"/>
+            {renderField("Full Name","name","Jane Smith")}
+            {renderField("Email","email","jane@example.com","email")}
+            {renderField("LinkedIn URL","linkedin","https://linkedin.com/in/jane")}
+            {renderField("Location","location","San Francisco, CA")}
+            {renderField("Phone","phone","+1 (555) 000-0000","tel")}
           </Card>
           <Card>
             <SH icon="🎯" title="Job Preferences"/>
-            <F lbl="Target Job Title(s)" k="targetTitle" ph="Product Manager, Senior PM"/>
-            <F lbl="Preferred Location(s)" k="targetLocation" ph="Remote, NYC, London"/>
-            <F lbl="Seniority Level" k="seniority" ph="Senior, Mid-level, Entry"/>
-            <F lbl="Industries" k="industry" ph="SaaS, Fintech, Healthcare"/>
+            {renderField("Target Job Title(s)","targetTitle","Product Manager, Senior PM")}
+            {renderField("Preferred Location(s)","targetLocation","Remote, NYC, London")}
+            {renderField("Seniority Level","seniority","Senior, Mid-level, Entry")}
+            {renderField("Industries","industry","SaaS, Fintech, Healthcare")}
             <div style={{marginBottom:14}}><FL>Keywords to Highlight</FL>
               <TA value={profile.keywords||""} onChange={v=>up("keywords",v)} placeholder="agile, roadmap, SQL..." rows={2}/>
             </div>
@@ -849,7 +876,7 @@ function SuggestedView({docs,jobs,setJobs}){
         2000
       );
       setRoles(JSON.parse(raw.replace(/```json|```/g,"").trim()));setGenerated(true);
-    }catch{setError("Could not generate suggestions. Try again.");}
+    }catch(e){setError(e?.message || "Could not generate suggestions. Try again.");}
     setLoading(false);
   }
 
@@ -956,7 +983,7 @@ function SearchView({jobs,setJobs}){
       );
       const data=JSON.parse(raw.replace(/```json|```/g,"").trim());
       setParsed(data.parsed);setResults(data.listings||[]);
-    }catch{setError("Search failed — try rephrasing.");}
+    }catch(e){setError(e?.message || "Search failed — try rephrasing.");}
     setLoading(false);
   }
 
@@ -1264,7 +1291,7 @@ function TailorView({docs,jobs,setJobs,hasPremium,onUpgrade,billingLoading}){
         setJobs(prev=>prev.map(j=>j.id===jobId?{...j,...updates}:j));
         try{await store.updateJob(jobId,updates);}catch(e){console.error(e);}
       }
-    }catch{setError("Tailoring failed. Try again.");}
+    }catch(e){setError(e?.message || "Tailoring failed. Try again.");}
     setLoading(false);
   }
 
