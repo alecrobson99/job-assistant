@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { supabase } from './supabase';
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LANDING PAGE THEME
@@ -71,38 +73,47 @@ function LandingPage({ onLogin }) {
     e.preventDefault();
     setLoading(true);
     setError("");
+  
     try {
       if (isLogin) {
-        // ── TODO: SIGN IN with Supabase ──────────────────────────────────────
-        // const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-        // if (error) throw error
-        // onLogin(data.user.user_metadata?.full_name || email.split("@")[0])
-        // ↓ Remove these two lines once Supabase is wired up:
-        await new Promise(r => setTimeout(r, 800));
-        onLogin(email.split("@")[0] || "User");
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+  
+        if (error) throw error;
+  
+        onLogin(
+          data.user.user_metadata?.full_name ||
+          email.split("@")[0]
+        );
       } else {
-        // ── TODO: SIGN UP with Supabase ──────────────────────────────────────
-        // const { data, error } = await supabase.auth.signUp({
-        //   email, password, options: { data: { full_name: name } }
-        // })
-        // if (error) throw error
-        // onLogin(name || email.split("@")[0])
-        // ↓ Remove these two lines once Supabase is wired up:
-        await new Promise(r => setTimeout(r, 800));
-        onLogin(name || email.split("@")[0] || "User");
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: name,
+            },
+          },
+        });
+  
+        if (error) throw error;
+  
+        onLogin(name || email.split("@")[0]);
       }
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
-
   const inputStyle = {
     width: "100%", background: LT.bgLight, border: `1.5px solid ${LT.border}`,
     borderRadius: 10, padding: "12px 16px", fontSize: 14, color: LT.text,
     outline: "none", transition: "all 0.2s", fontFamily: "inherit", boxSizing: "border-box",
   };
-
+  
   return (
     <div style={{ minHeight:"100vh", background:`linear-gradient(165deg,${LT.bg} 0%,#0D1628 50%,#161B2E 100%)`,
       position:"relative", overflow:"hidden" }}>
@@ -301,15 +312,130 @@ async function callClaude(system, userMsg, maxTokens=1500) {
 }
 
 const store = {
-  getDocs:    ()=>JSON.parse(localStorage.getItem("jaa_docs")||"[]"),
-  setDocs:    (d)=>localStorage.setItem("jaa_docs",JSON.stringify(d)),
-  getJobs:    ()=>JSON.parse(localStorage.getItem("jaa_jobs")||"[]"),
-  setJobs:    (j)=>localStorage.setItem("jaa_jobs",JSON.stringify(j)),
-  getProfile: ()=>JSON.parse(localStorage.getItem("jaa_profile")||"{}"),
-  setProfile: (p)=>localStorage.setItem("jaa_profile",JSON.stringify(p)),
-};
-const genId = ()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+  // DOCUMENTS
+  getDocs: async () => {
+    const { data, error } = await supabase
+      .from("documents")
+      .select("*")
+      .order("created_at", { ascending: false });
 
+    if (error) throw error;
+    return data;
+  },
+
+  setDocs: async (docs) => {
+    // optional: bulk replace (not always recommended)
+    // usually you want insert/update instead
+    throw new Error("Use insertDoc / updateDoc instead of setDocs");
+  },
+
+  insertDoc: async (doc) => {
+    const { data: { user } } = await supabase.auth.getUser();
+  
+    if (!user) {
+      throw new Error("You are not logged in");
+    }
+  
+    const { data, error } = await supabase
+      .from("documents")
+      .insert({
+        ...doc,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+  
+    if (error) throw error;
+    return data;
+  },
+  },
+
+  updateDoc: async (id, updates) => {
+    const { data, error } = await supabase
+      .from("documents")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  deleteDoc: async (id) => {
+    const { error } = await supabase
+      .from("documents")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+  },
+
+  // JOBS
+  getJobs: async () => {
+    const { data, error } = await supabase
+      .from("saved_jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  insertJob: async (job) => {
+    const { data, error } = await supabase
+      .from("saved_jobs")
+      .insert(job)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  updateJob: async (id, updates) => {
+    const { data, error } = await supabase
+      .from("saved_jobs")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  deleteJob: async (id) => {
+    const { error } = await supabase
+      .from("saved_jobs")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+  },
+
+  // PROFILE
+  getProfile: async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data;
+  },
+
+  setProfile: async (updates) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+};
 function exportCSV(jobs,docs) {
   const hdrs=["Job Title","Company","Location","URL","Date Saved","Status","Notes","Resume Used","Cover Letter Used"];
   const rows=jobs.map(j=>{
