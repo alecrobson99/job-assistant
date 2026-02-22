@@ -311,6 +311,8 @@ async function callClaude(system, userMsg, maxTokens=1500) {
   return data.content.map(b=>b.text||"").join("");
 }
 
+const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
 const store = {
   // DOCUMENTS
   getDocs: async () => {
@@ -323,10 +325,8 @@ const store = {
     return data;
   },
 
-  setDocs: async (docs) => {
-    // optional: bulk replace (not always recommended)
-    // usually you want insert/update instead
-    throw new Error("Use insertDoc / updateDoc instead of setDocs");
+  setDocs: async () => {
+    // no-op: use insertDoc / updateDoc / deleteDoc directly
   },
 
   insertDoc: async (doc) => {
@@ -347,7 +347,6 @@ const store = {
   
     if (error) throw error;
     return data;
-  },
   },
 
   updateDoc: async (id, updates) => {
@@ -532,8 +531,11 @@ function FileUpBtn({onText,label="Upload .txt/.pdf"}){
 // PROFILE VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
 function ProfileView({docs,setDocs,userName}){
-  const [profile,setP]=useState(()=>{const p=store.getProfile();return p.name?p:{...p,name:userName||""};});
+  const [profile,setP]=useState({name:userName||""});
   const [savedMsg,setSavedMsg]=useState("");
+  useState(()=>{
+    store.getProfile().then(p=>{ if(p) setP(prev=>({...prev,...p})); }).catch(()=>{});
+  });
   const [showDocForm,setShowDocForm]=useState(false);
   const [docType,setDocType]=useState("resume");
   const [docTag,setDocTag]=useState("");
@@ -541,17 +543,29 @@ function ProfileView({docs,setDocs,userName}){
   const [editDocId,setEditDocId]=useState(null);
 
   function up(k,v){setP(p=>({...p,[k]:v}));}
-  function save(){store.setProfile(profile);setSavedMsg("Saved!");setTimeout(()=>setSavedMsg(""),2000);}
+  async function save(){
+    try { await store.setProfile(profile); setSavedMsg("Saved!"); setTimeout(()=>setSavedMsg(""),2000); }
+    catch(e){ alert("Error saving profile: "+e.message); }
+  }
 
-  function saveDoc(){
+  async function saveDoc(){
     if(!docContent.trim()||!docTag.trim())return;
-    const updated=editDocId?docs.map(d=>d.id===editDocId?{...d,tag:docTag,content:docContent,type:docType}:d)
-      :[{id:genId(),type:docType,tag:docTag,content:docContent,createdAt:new Date().toISOString()},...docs];
-    setDocs(updated);store.setDocs(updated);
-    setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocType("resume");
+    try {
+      if(editDocId){
+        await store.updateDoc(editDocId,{tag:docTag,content:docContent,type:docType});
+        setDocs(docs.map(d=>d.id===editDocId?{...d,tag:docTag,content:docContent,type:docType}:d));
+      } else {
+        const newDoc = await store.insertDoc({type:docType,tag:docTag,content:docContent});
+        setDocs([newDoc,...docs]);
+      }
+      setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocType("resume");
+    } catch(e){ alert("Error saving document: "+e.message); }
   }
   function startEdit(doc){setEditDocId(doc.id);setDocType(doc.type);setDocTag(doc.tag);setDocContent(doc.content);setShowDocForm(true);}
-  function delDoc(id){const u=docs.filter(d=>d.id!==id);setDocs(u);store.setDocs(u);}
+  async function delDoc(id){
+    try { await store.deleteDoc(id); setDocs(docs.filter(d=>d.id!==id)); }
+    catch(e){ alert("Error deleting document: "+e.message); }
+  }
   function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");}
 
   const F=({lbl,k,ph,type="text"})=><div style={{marginBottom:14}}><FL>{lbl}</FL><AppInput value={profile[k]||""} onChange={v=>up(k,v)} placeholder={ph} type={type}/></div>;
@@ -661,7 +675,8 @@ function SuggestedView({docs,jobs,setJobs}){
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
   const [generated,setGenerated]=useState(false);
-  const profile=store.getProfile();
+  const [profile,setProfile]=useState({});
+  useState(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); });
   const resume=docs.find(d=>d.type==="resume");
 
   async function generate(){
@@ -677,10 +692,12 @@ function SuggestedView({docs,jobs,setJobs}){
     setLoading(false);
   }
 
-  function saveRole(role){
+  async function saveRole(role){
     if(jobs.find(j=>j.title===role.title&&j.company==="(Suggested Role)"))return;
-    const updated=[{id:genId(),title:role.title,company:"(Suggested Role)",location:"",url:"",description:role.whyFit,status:"saved",notes:"",savedAt:new Date().toISOString()},...jobs];
-    setJobs(updated);store.setJobs(updated);
+    try{
+      const saved=await store.insertJob({title:role.title,company:"(Suggested Role)",location:"",url:"",description:role.whyFit,status:"saved",notes:""});
+      setJobs(prev=>[saved,...prev]);
+    }catch(e){alert("Error saving role: "+e.message);}
   }
 
   const gc=g=>g==="High"?T.green:g==="Medium"?T.amber:T.textMute;
@@ -756,7 +773,8 @@ function SearchView({docs,jobs,setJobs}){
   const [loading,setLoading]=useState(false);
   const [parsed,setParsed]=useState(null);
   const [error,setError]=useState("");
-  const profile=store.getProfile();
+  const [profile,setProfile]=useState({});
+  useState(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); });
 
   async function search(){
     if(!query.trim())return;
@@ -773,10 +791,12 @@ function SearchView({docs,jobs,setJobs}){
     setLoading(false);
   }
 
-  function saveJob(job){
+  async function saveJob(job){
     if(jobs.find(j=>j.title===job.title&&j.company===job.company))return;
-    const updated=[{id:genId(),...job,status:"saved",notes:"",savedAt:new Date().toISOString()},...jobs];
-    setJobs(updated);store.setJobs(updated);
+    try{
+      const saved=await store.insertJob({...job,status:"saved",notes:""});
+      setJobs(prev=>[saved,...prev]);
+    }catch(e){alert("Error saving job: "+e.message);}
   }
 
   return(
@@ -836,9 +856,9 @@ function TrackerView({jobs,setJobs,docs}){
   const [filterStatus,setFilterStatus]=useState("all");
   const [sortBy,setSortBy]=useState("date");
 
-  function updateStatus(id,status){const u=jobs.map(j=>j.id===id?{...j,status}:j);setJobs(u);store.setJobs(u);}
-  function saveNotes(id){const u=jobs.map(j=>j.id===id?{...j,notes:editNotes}:j);setJobs(u);store.setJobs(u);setEditingNoteId(null);}
-  function deleteJob(id){const u=jobs.filter(j=>j.id!==id);setJobs(u);store.setJobs(u);if(openId===id)setOpenId(null);}
+  async function updateStatus(id,status){const u=jobs.map(j=>j.id===id?{...j,status}:j);setJobs(u);try{await store.updateJob(id,{status});}catch(e){console.error(e);}}
+  async function saveNotes(id){const u=jobs.map(j=>j.id===id?{...j,notes:editNotes}:j);setJobs(u);try{await store.updateJob(id,{notes:editNotes});}catch(e){console.error(e);}setEditingNoteId(null);}
+  async function deleteJob(id){const u=jobs.filter(j=>j.id!==id);setJobs(u);try{await store.deleteJob(id);}catch(e){console.error(e);}if(openId===id)setOpenId(null);}
 
   const filtered=jobs.filter(j=>filterStatus==="all"||j.status===filterStatus).sort((a,b)=>{
     if(sortBy==="date")return new Date(b.savedAt)-new Date(a.savedAt);
@@ -986,8 +1006,9 @@ function TailorView({docs,jobs,setJobs}){
       );
       const data=JSON.parse(raw.replace(/```json|```/g,"").trim());setResult(data);
       if(jobId){
-        const u=jobs.map(j=>j.id===jobId?{...j,tailoredResume:data.tailored_resume_summary,tailoredCover:data.tailored_cover_letter,keywords:data.keyword_alignment,matchScore:data.match_score,resumeDocId:resumeId,coverDocId:coverId}:j);
-        setJobs(u);store.setJobs(u);
+        const updates={tailoredResume:data.tailored_resume_summary,tailoredCover:data.tailored_cover_letter,keywords:data.keyword_alignment,matchScore:data.match_score,resumeDocId:resumeId,coverDocId:coverId};
+        setJobs(jobs.map(j=>j.id===jobId?{...j,...updates}:j));
+        try{await store.updateJob(jobId,updates);}catch(e){console.error(e);}
       }
     }catch{setError("Tailoring failed. Try again.");}
     setLoading(false);
@@ -1129,8 +1150,16 @@ function AppShell({docs,setDocs,jobs,setJobs,userName,onLogout}){
 export default function App(){
   const [loggedIn,setLoggedIn]=useState(false);
   const [userName,setUserName]=useState("");
-  const [docs,setDocs]=useState(()=>store.getDocs());
-  const [jobs,setJobs]=useState(()=>store.getJobs());
+  const [docs,setDocs]=useState([]);
+  const [jobs,setJobs]=useState([]);
+
+  // Load data from Supabase after login
+  async function loadData(){
+    try{
+      const [d,j]=await Promise.all([store.getDocs(),store.getJobs()]);
+      setDocs(d||[]); setJobs(j||[]);
+    }catch(e){console.error("Error loading data:",e);}
+  }
 
   if(!loggedIn){
     return(
@@ -1145,7 +1174,7 @@ export default function App(){
           @keyframes slideInRight{from{opacity:0;transform:translateX(40px);}to{opacity:1;transform:translateX(0);}}
           @keyframes spin{to{transform:rotate(360deg);}}
         `}</style>
-        <LandingPage onLogin={(name)=>{setUserName(name);setLoggedIn(true);}}/>
+        <LandingPage onLogin={(name)=>{setUserName(name);setLoggedIn(true);loadData();}}/>
       </>
     );
   }
