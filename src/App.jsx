@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { supabase } from './supabase';
+import { getSupabaseClient } from "./supabase";
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -75,6 +75,8 @@ function LandingPage({ onLogin }) {
     setError("");
   
     try {
+      const supabase = getSupabaseClient();
+
       if (isLogin) {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
@@ -88,11 +90,12 @@ function LandingPage({ onLogin }) {
           email.split("@")[0]
         );
       } else {
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
+              name,
               full_name: name,
             },
           },
@@ -103,7 +106,11 @@ function LandingPage({ onLogin }) {
         onLogin(name || email.split("@")[0]);
       }
     } catch (err) {
-      setError(err.message || "Something went wrong. Please try again.");
+      if (err?.message?.includes("Database error saving new user")) {
+        setError("Signup failed in Supabase DB trigger/policy. Check your `profiles` table and auth trigger SQL.");
+      } else {
+        setError(err.message || "Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -313,12 +320,29 @@ async function callClaude(system, userMsg, maxTokens=1500) {
 
 const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+async function getAuthContext() {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data.user) {
+    throw new Error("You are not logged in");
+  }
+
+  return { supabase, user: data.user };
+}
+
 const store = {
   // DOCUMENTS
   getDocs: async () => {
+    const { supabase, user } = await getAuthContext();
     const { data, error } = await supabase
       .from("documents")
       .select("*")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -330,11 +354,7 @@ const store = {
   },
 
   insertDoc: async (doc) => {
-    const { data: { user } } = await supabase.auth.getUser();
-  
-    if (!user) {
-      throw new Error("You are not logged in");
-    }
+    const { supabase, user } = await getAuthContext();
   
     const { data, error } = await supabase
       .from("documents")
@@ -350,10 +370,12 @@ const store = {
   },
 
   updateDoc: async (id, updates) => {
+    const { supabase, user } = await getAuthContext();
     const { data, error } = await supabase
       .from("documents")
       .update(updates)
       .eq("id", id)
+      .eq("user_id", user.id)
       .select()
       .single();
 
@@ -362,19 +384,23 @@ const store = {
   },
 
   deleteDoc: async (id) => {
+    const { supabase, user } = await getAuthContext();
     const { error } = await supabase
       .from("documents")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", user.id);
 
     if (error) throw error;
   },
 
   // JOBS
   getJobs: async () => {
+    const { supabase, user } = await getAuthContext();
     const { data, error } = await supabase
       .from("saved_jobs")
       .select("*")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -382,9 +408,13 @@ const store = {
   },
 
   insertJob: async (job) => {
+    const { supabase, user } = await getAuthContext();
     const { data, error } = await supabase
       .from("saved_jobs")
-      .insert(job)
+      .insert({
+        ...job,
+        user_id: user.id,
+      })
       .select()
       .single();
 
@@ -393,10 +423,12 @@ const store = {
   },
 
   updateJob: async (id, updates) => {
+    const { supabase, user } = await getAuthContext();
     const { data, error } = await supabase
       .from("saved_jobs")
       .update(updates)
       .eq("id", id)
+      .eq("user_id", user.id)
       .select()
       .single();
 
@@ -405,19 +437,23 @@ const store = {
   },
 
   deleteJob: async (id) => {
+    const { supabase, user } = await getAuthContext();
     const { error } = await supabase
       .from("saved_jobs")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", user.id);
 
     if (error) throw error;
   },
 
   // PROFILE
   getProfile: async () => {
+    const { supabase, user } = await getAuthContext();
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
+      .eq("id", user.id)
       .single();
 
     if (error && error.code !== "PGRST116") throw error;
@@ -425,9 +461,16 @@ const store = {
   },
 
   setProfile: async (updates) => {
+    const { supabase, user } = await getAuthContext();
     const { data, error } = await supabase
       .from("profiles")
-      .update(updates)
+      .upsert(
+        {
+          ...updates,
+          id: user.id,
+        },
+        { onConflict: "id" }
+      )
       .select()
       .single();
 
