@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { getSupabaseClient } from "./supabase";
 
 
@@ -28,6 +28,33 @@ const STATUS_META = {
 const STATUS_OPTIONS = ["saved","applied","interview","offer","rejected"];
 const FEEDBACK_EMAIL = "feedback@jobassistant.app";
 const WEEKLY_TAILOR_LIMIT = 7;
+const LOCATION_OPTIONS = [
+  "Remote",
+  "Hybrid",
+  "On-site",
+  "New York, NY",
+  "San Francisco, CA",
+  "Chicago, IL",
+  "Austin, TX",
+  "Seattle, WA",
+  "Los Angeles, CA",
+  "Boston, MA",
+  "Atlanta, GA",
+];
+const TITLE_OPTIONS = [
+  "Software Engineer",
+  "Senior Software Engineer",
+  "Frontend Engineer",
+  "Backend Engineer",
+  "Full Stack Engineer",
+  "Engineering Manager",
+  "Product Manager",
+  "Data Analyst",
+  "Data Scientist",
+  "Customer Success Manager",
+  "Sales Manager",
+  "Marketing Manager",
+];
 
 async function searchJobsByKeyword(query) {
   const supabase = getSupabaseClient();
@@ -591,11 +618,9 @@ function FileUpBtn({onText,label="Upload .txt/.pdf"}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROFILE VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProfileView({docs,setDocs,userName}){
-  const [profile,setP]=useState({name:userName||""});
+function ProfileView({docs,setDocs,profile,setProfileState}){
   const [savedMsg,setSavedMsg]=useState("");
   const [profileError,setProfileError]=useState("");
-  const [profileLoading,setProfileLoading]=useState(true);
   const [savingProfile,setSavingProfile]=useState(false);
   const [savingDoc,setSavingDoc]=useState(false);
   const [docError,setDocError]=useState("");
@@ -605,22 +630,15 @@ function ProfileView({docs,setDocs,userName}){
   const [docContent,setDocContent]=useState("");
   const [editDocId,setEditDocId]=useState(null);
 
-  useEffect(()=>{
-    let mounted = true;
-    setProfileLoading(true);
-    store.getProfile()
-      .then((p)=>{ if(mounted && p) setP(prev=>({...prev,...p})); })
-      .catch(()=>{ if(mounted) setProfileError("Could not load profile data."); })
-      .finally(()=>{ if(mounted) setProfileLoading(false); });
-    return ()=>{ mounted = false; };
-  },[]);
-
-  function up(k,v){setP(p=>({...p,[k]:v}));}
+  function up(k,v){setProfileState((p)=>({...p,[k]:v}));}
   async function save(){
     setSavingProfile(true);
     setProfileError("");
     try {
-      await store.setProfile(profile);
+      const savedProfile = await store.setProfile(profile);
+      if (savedProfile) {
+        setProfileState((prev) => ({ ...prev, ...savedProfile }));
+      }
       setSavedMsg("Saved!");
       setTimeout(()=>setSavedMsg(""),2000);
     } catch(e){
@@ -660,6 +678,16 @@ function ProfileView({docs,setDocs,userName}){
     }
   }
   function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocError("");}
+  const locationOptions = LOCATION_OPTIONS.includes(profile.location)
+    ? LOCATION_OPTIONS
+    : profile.location
+      ? [profile.location, ...LOCATION_OPTIONS]
+      : LOCATION_OPTIONS;
+  const titleOptions = TITLE_OPTIONS.includes(profile.targetTitle)
+    ? TITLE_OPTIONS
+    : profile.targetTitle
+      ? [profile.targetTitle, ...TITLE_OPTIONS]
+      : TITLE_OPTIONS;
 
   const renderField=(lbl,k,ph,type="text")=>(
     <div style={{marginBottom:14}}>
@@ -679,18 +707,38 @@ function ProfileView({docs,setDocs,userName}){
 
         {profileError&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}>{profileError}</div>}
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:18,marginBottom:18,opacity:profileLoading?0.65:1}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:18,marginBottom:18}}>
           <Card>
             <SH icon="👤" title="Personal Info"/>
             {renderField("Full Name","name","Jane Smith")}
             {renderField("Email","email","jane@example.com","email")}
             {renderField("LinkedIn URL","linkedin","https://linkedin.com/in/jane")}
-            {renderField("Location","location","San Francisco, CA")}
+            <div style={{marginBottom:14}}>
+              <FL>Location</FL>
+              <Sel
+                value={profile.location || ""}
+                onChange={(v)=>up("location",v)}
+                options={[
+                  { value: "", label: "Select location" },
+                  ...locationOptions.map((opt)=>({ value: opt, label: opt })),
+                ]}
+              />
+            </div>
             {renderField("Phone","phone","+1 (555) 000-0000","tel")}
           </Card>
           <Card>
             <SH icon="🎯" title="Job Preferences"/>
-            {renderField("Target Job Title(s)","targetTitle","Product Manager, Senior PM")}
+            <div style={{marginBottom:14}}>
+              <FL>Target Job Title</FL>
+              <Sel
+                value={profile.targetTitle || ""}
+                onChange={(v)=>up("targetTitle",v)}
+                options={[
+                  { value: "", label: "Select target title" },
+                  ...titleOptions.map((opt)=>({ value: opt, label: opt })),
+                ]}
+              />
+            </div>
             {renderField("Preferred Location(s)","targetLocation","Remote, NYC, London")}
             {renderField("Seniority Level","seniority","Senior, Mid-level, Entry")}
             {renderField("Industries","industry","SaaS, Fintech, Healthcare")}
@@ -720,7 +768,7 @@ function ProfileView({docs,setDocs,userName}){
         </Card>
 
         <div style={{marginBottom:24}}>
-          <Btn onClick={save} variant={savedMsg?"success":"primary"} disabled={savingProfile || profileLoading}>
+          <Btn onClick={save} variant={savedMsg?"success":"primary"} disabled={savingProfile}>
             {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save All Preferences"}
           </Btn>
         </div>
@@ -802,25 +850,49 @@ function SuggestedView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // JOB SEARCH VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function SearchView({jobs,setJobs}){
+function SearchView({jobs,setJobs,profile}){
   const [query,setQuery]=useState("");
   const [results,setResults]=useState([]);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
   const [savingJobKey,setSavingJobKey]=useState("");
+  const profileTitle = (profile?.targetTitle || "").trim();
+  const profileLocation = (profile?.targetLocation || profile?.location || "").trim();
+  const profileKeywords = (profile?.keywords || "").trim();
+  const profileCompanies = (profile?.targetCompanies || "").trim();
+  const savedJobKeys = useMemo(
+    () => new Set(jobs.map((j) => `${j.title || ""}::${j.company || ""}`)),
+    [jobs]
+  );
+
+  useEffect(() => {
+    if (!query && profileTitle) {
+      setQuery(profileTitle);
+    }
+  }, [query, profileTitle]);
 
   async function search(){
-    if(!query.trim())return;
+    const baseQuery = query.trim() || profileTitle;
+    if(!baseQuery){
+      setError("Enter a keyword or set a target title in Profile.");
+      return;
+    }
+    const parts = [baseQuery];
+    if (profileLocation) parts.push(profileLocation);
+    if (profileKeywords) parts.push(profileKeywords);
+    if (profile?.useCompanyPrefs && profileCompanies) parts.push(profileCompanies);
+    const finalQuery = parts.join(", ");
+
     setLoading(true);setError("");setResults([]);
     try{
-      const jobsFromApi = await searchJobsByKeyword(query.trim());
+      const jobsFromApi = await searchJobsByKeyword(finalQuery);
       setResults(jobsFromApi);
     }catch(e){setError(e?.message || "Search failed. Check job board API setup.");}
     setLoading(false);
   }
 
   async function saveJob(job){
-    if(jobs.find(j=>j.title===job.title&&j.company===job.company))return;
+    if(savedJobKeys.has(`${job.title || ""}::${job.company || ""}`))return;
     const jobKey = `${job.title}::${job.company}`;
     setSavingJobKey(jobKey);
     try{
@@ -847,14 +919,19 @@ function SearchView({jobs,setJobs}){
             onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
           <Btn onClick={search} disabled={loading}>{loading?<><Spinner color="#fff"/> Searching…</>:"Search"}</Btn>
         </div>
+        {(profileTitle || profileLocation) && (
+          <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>
+            Profile context: {profileTitle || "No target title"}{profileLocation ? ` · ${profileLocation}` : ""}
+          </div>
+        )}
         {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:16}}>{error}</div>}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
           {results.map((job,i)=>{
-            const isSaved=jobs.find(j=>j.title===job.title&&j.company===job.company);
+            const isSaved=savedJobKeys.has(`${job.title || ""}::${job.company || ""}`);
             const jobKey = `${job.title}::${job.company}`;
             const saving = savingJobKey === jobKey;
             return(
-              <Card key={i}>
+              <Card key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                   <div style={{flex:1,marginRight:10}}>
                     <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:2}}>{job.title}</div>
@@ -1168,7 +1245,7 @@ function TrackerView({jobs,setJobs,docs}){
 // SIDEBAR + APP SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
 function AppShell({
-  docs,setDocs,jobs,setJobs,userName,onLogout,
+  docs,setDocs,jobs,setJobs,userName,onLogout,profile,setProfileState,
 }){
   const [active,setActive]=useState("profile");
   const nav=[
@@ -1179,9 +1256,9 @@ function AppShell({
   ];
 
   const views={
-    profile:   <ProfileView   docs={docs} setDocs={setDocs} userName={userName}/>,
+    profile:   <ProfileView   docs={docs} setDocs={setDocs} profile={profile} setProfileState={setProfileState}/>,
     suggested: <SuggestedView />,
-    search:    <SearchView    jobs={jobs} setJobs={setJobs}/>,
+    search:    <SearchView    jobs={jobs} setJobs={setJobs} profile={profile}/>,
     tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs}/>,
   };
 
@@ -1234,15 +1311,22 @@ export default function App(){
   const [userName,setUserName]=useState("");
   const [docs,setDocs]=useState([]);
   const [jobs,setJobs]=useState([]);
+  const [profile,setProfileState]=useState({ name: "" });
 
   // Load data from Supabase after login
   async function loadData(){
     try{
-      const [d,j]=await Promise.all([
+      const [d,j,p]=await Promise.all([
         store.getDocs(),
         store.getJobs(),
+        store.getProfile(),
       ]);
-      setDocs(d||[]); setJobs(j||[]);
+      setDocs(d||[]);
+      setJobs(j||[]);
+      setProfileState((prev) => ({
+        ...prev,
+        ...(p || {}),
+      }));
     }catch(e){console.error("Error loading data:",e);}
   }
 
@@ -1263,6 +1347,7 @@ export default function App(){
             "";
 
           setUserName(displayName);
+          setProfileState((prev) => ({ ...prev, name: prev.name || displayName || "" }));
           setLoggedIn(true);
           await loadData();
         }
@@ -1289,6 +1374,7 @@ export default function App(){
     } finally {
       setDocs([]);
       setJobs([]);
+      setProfileState({ name: "" });
       setUserName("");
       setLoggedIn(false);
       setBootstrappingAuth(false);
@@ -1316,6 +1402,7 @@ export default function App(){
         `}</style>
         <LandingPage onLogin={async (name)=>{
           setUserName(name);
+          setProfileState((prev) => ({ ...prev, name: name || prev.name || "" }));
           setLoggedIn(true);
           await loadData();
         }}/>
@@ -1345,6 +1432,8 @@ export default function App(){
       <AppShell docs={docs} setDocs={setDocs} jobs={jobs} setJobs={setJobs}
         userName={userName}
         onLogout={handleLogout}
+        profile={profile}
+        setProfileState={setProfileState}
       />
     </>
   );
