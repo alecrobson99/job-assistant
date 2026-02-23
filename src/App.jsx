@@ -30,46 +30,35 @@ const FEEDBACK_EMAIL = "feedback@jobassistant.app";
 const WEEKLY_TAILOR_LIMIT = 7;
 
 async function searchJobsByKeyword(query) {
-  const apiUrl = import.meta.env.VITE_JOB_SEARCH_API_URL;
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.functions.invoke("job-search", {
+    body: { query, page: 1, numPages: 1, country: "us", datePosted: "all" },
+  });
 
-  if (!apiUrl) {
-    return [
-      {
-        title: `${query} Specialist`,
-        company: "ExampleCo",
-        location: "Remote",
-        description: `Placeholder job result for "${query}". Connect a real job board API via VITE_JOB_SEARCH_API_URL to replace this mock data.`,
-        apply_url: "https://example.com/jobs",
-        source: "mock",
-      },
-      {
-        title: `${query} Manager`,
-        company: "DemoTech",
-        location: "New York, NY",
-        description: "Second placeholder listing for development and UI testing.",
-        apply_url: "https://example.com/jobs/2",
-        source: "mock",
-      },
-    ];
+  if (error) {
+    throw new Error(`Job search function failed: ${error.message}`);
+  }
+  if (data?.error) {
+    throw new Error(data.error);
   }
 
-  const res = await fetch(`${apiUrl}?q=${encodeURIComponent(query)}`);
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Job search API failed (${res.status}). ${body}`);
-  }
+  const rawJobs = Array.isArray(data) ? data : (data?.data || data?.jobs || data?.results || []);
 
-  const payload = await res.json();
-  const rawJobs = Array.isArray(payload) ? payload : (payload.jobs || payload.results || []);
+  return rawJobs.map((job) => {
+    const city = job.job_city || "";
+    const state = job.job_state || "";
+    const country = job.job_country || "";
+    const location = [city, state || country].filter(Boolean).join(", ") || job.location || "Not specified";
 
-  return rawJobs.map((job) => ({
-    title: job.title || job.position || "Untitled Role",
-    company: job.company || job.company_name || "Unknown Company",
-    location: job.location || job.city || "Not specified",
-    description: job.description || job.summary || "",
-    apply_url: job.apply_url || job.url || job.applyUrl || "",
-    source: job.source || job.board || "job_board_api",
-  }));
+    return {
+      title: job.job_title || job.title || job.position || "Untitled Role",
+      company: job.employer_name || job.company || job.company_name || "Unknown Company",
+      location,
+      description: job.job_description || job.description || job.summary || "",
+      apply_url: job.job_apply_link || job.job_google_link || job.apply_url || job.url || job.applyUrl || "",
+      source: job.job_publisher || job.source || job.board || "jsearch",
+    };
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
