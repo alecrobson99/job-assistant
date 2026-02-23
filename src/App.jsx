@@ -3,16 +3,6 @@ import { getSupabaseClient } from "./supabase";
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// LANDING PAGE THEME
-// ═══════════════════════════════════════════════════════════════════════════════
-const LT = {
-  bg: "#0A0E1A", bgLight: "#131824", surface: "#1A1F2E", border: "#2A3142",
-  primary: "#4F7CFF", primaryLight: "#6B8FFF", primaryDark: "#3D5FCC",
-  accent: "#00D9FF", text: "#F7F9FC", textSub: "#A8B2D1", textMute: "#6B7590",
-  purple: "#8B5CF6", green: "#10B981",
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // APP THEME
 // ═══════════════════════════════════════════════════════════════════════════════
 const T = {
@@ -36,14 +26,50 @@ const STATUS_META = {
   rejected:  { color: T.red,     bg: T.redBg,        border: T.redBorder,     label: "Rejected"  },
 };
 const STATUS_OPTIONS = ["saved","applied","interview","offer","rejected"];
-const PREMIUM_STATUSES = ["active", "trialing"];
-const BILLING_ENABLED = false;
+const FEEDBACK_EMAIL = "feedback@jobassistant.app";
+const WEEKLY_TAILOR_LIMIT = 7;
 
-function hasPremiumAccess(subscription) {
-  if (!subscription) return false;
-  if (!PREMIUM_STATUSES.includes(subscription.status)) return false;
-  if (!subscription.current_period_end) return true;
-  return new Date(subscription.current_period_end) > new Date();
+async function searchJobsByKeyword(query) {
+  const apiUrl = import.meta.env.VITE_JOB_SEARCH_API_URL;
+
+  if (!apiUrl) {
+    return [
+      {
+        title: `${query} Specialist`,
+        company: "ExampleCo",
+        location: "Remote",
+        description: `Placeholder job result for "${query}". Connect a real job board API via VITE_JOB_SEARCH_API_URL to replace this mock data.`,
+        apply_url: "https://example.com/jobs",
+        source: "mock",
+      },
+      {
+        title: `${query} Manager`,
+        company: "DemoTech",
+        location: "New York, NY",
+        description: "Second placeholder listing for development and UI testing.",
+        apply_url: "https://example.com/jobs/2",
+        source: "mock",
+      },
+    ];
+  }
+
+  const res = await fetch(`${apiUrl}?q=${encodeURIComponent(query)}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Job search API failed (${res.status}). ${body}`);
+  }
+
+  const payload = await res.json();
+  const rawJobs = Array.isArray(payload) ? payload : (payload.jobs || payload.results || []);
+
+  return rawJobs.map((job) => ({
+    title: job.title || job.position || "Untitled Role",
+    company: job.company || job.company_name || "Unknown Company",
+    location: job.location || job.city || "Not specified",
+    description: job.description || job.summary || "",
+    apply_url: job.apply_url || job.url || job.applyUrl || "",
+    source: job.source || job.board || "job_board_api",
+  }));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -99,7 +125,7 @@ function LandingPage({ onLogin }) {
           email.split("@")[0]
         );
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -111,8 +137,20 @@ function LandingPage({ onLogin }) {
         });
   
         if (error) throw error;
-  
-        onLogin(name || email.split("@")[0]);
+
+        // Some Supabase projects require email confirmation and won't return a session on sign-up.
+        if (!data?.session || !data?.user) {
+          setIsLogin(true);
+          setError("Account created. Confirm your email, then sign in.");
+          return;
+        }
+
+        onLogin(
+          data.user.user_metadata?.full_name ||
+          data.user.user_metadata?.name ||
+          name ||
+          email.split("@")[0]
+        );
       }
     } catch (err) {
       if (err?.message?.includes("Database error saving new user")) {
@@ -125,189 +163,98 @@ function LandingPage({ onLogin }) {
     }
   };
   const inputStyle = {
-    width: "100%", background: LT.bgLight, border: `1.5px solid ${LT.border}`,
-    borderRadius: 10, padding: "12px 16px", fontSize: 14, color: LT.text,
-    outline: "none", transition: "all 0.2s", fontFamily: "inherit", boxSizing: "border-box",
+    width: "100%",
+    background: "#FFFFFF",
+    border: "1px solid #D0D7E2",
+    borderRadius: 8,
+    padding: "11px 12px",
+    fontSize: 14,
+    color: "#111827",
+    outline: "none",
+    transition: "border-color 0.15s",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
   };
   
   return (
-    <div style={{ minHeight:"100vh", background:`linear-gradient(165deg,${LT.bg} 0%,#0D1628 50%,#161B2E 100%)`,
-      position:"relative", overflow:"hidden" }}>
-
-      {/* BG blobs */}
-      <div style={{ position:"absolute", inset:0, opacity:0.4,
-        backgroundImage:`radial-gradient(circle at 20% 30%,${LT.primary}15 0%,transparent 50%),
-          radial-gradient(circle at 80% 70%,${LT.accent}10 0%,transparent 50%),
-          radial-gradient(circle at 50% 50%,${LT.purple}08 0%,transparent 60%)` }}/>
-      <div style={{ position:"absolute", inset:0,
-        backgroundImage:`linear-gradient(${LT.border}40 1px,transparent 1px),linear-gradient(90deg,${LT.border}40 1px,transparent 1px)`,
-        backgroundSize:"50px 50px", opacity:0.15,
-        maskImage:"radial-gradient(ellipse 80% 50% at 50% 50%,black 0%,transparent 100%)" }}/>
-      <div style={{ position:"absolute", top:"10%", right:"15%", width:400, height:400,
-        background:`radial-gradient(circle,${LT.primary}30 0%,transparent 70%)`,
-        borderRadius:"50%", filter:"blur(80px)", animation:"float 20s ease-in-out infinite" }}/>
-      <div style={{ position:"absolute", bottom:"15%", left:"10%", width:300, height:300,
-        background:`radial-gradient(circle,${LT.accent}25 0%,transparent 70%)`,
-        borderRadius:"50%", filter:"blur(70px)", animation:"float 15s ease-in-out infinite reverse" }}/>
-
-      {/* Nav */}
-      <nav style={{ position:"relative", zIndex:10, display:"flex", justifyContent:"space-between",
-        alignItems:"center", padding:"24px 48px", maxWidth:1400, margin:"0 auto" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:40, height:40, background:`linear-gradient(135deg,${LT.primary},${LT.accent})`,
-            borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:20, fontWeight:800, color:"#fff", boxShadow:`0 0 30px ${LT.primary}40` }}>J</div>
-          <div style={{ fontSize:20, fontWeight:800, color:LT.text, letterSpacing:"-0.02em" }}>JobAssist</div>
-        </div>
-        <div style={{ display:"flex", gap:16, alignItems:"center" }}>
-          {["Features","Pricing"].map(l=>(
-            <a key={l} href="#" style={{ color:LT.textSub, textDecoration:"none", fontSize:14, fontWeight:500 }}
-              onMouseEnter={e=>e.target.style.color=LT.text} onMouseLeave={e=>e.target.style.color=LT.textSub}>{l}</a>
-          ))}
-        </div>
-      </nav>
-
-      {/* Main */}
-      <main style={{ position:"relative", zIndex:10, maxWidth:1400, margin:"0 auto",
-        padding:"60px 48px", display:"flex", alignItems:"center",
-        minHeight:"calc(100vh - 88px)", gap:80 }}>
-
-        {/* Left hero */}
-        <div style={{ flex:1, animation:"slideInLeft 0.8s ease-out" }}>
-          <div style={{ display:"inline-block",
-            background:`linear-gradient(90deg,${LT.primary}20,${LT.purple}20)`,
-            border:`1px solid ${LT.primary}30`, borderRadius:100, padding:"6px 16px",
-            fontSize:12, fontWeight:700, color:LT.primaryLight, letterSpacing:"0.05em",
-            textTransform:"uppercase", marginBottom:24 }}>
-            ✨ AI-Powered Job Search
-          </div>
-          <h1 style={{ fontSize:72, fontWeight:800, lineHeight:1.1, marginBottom:24,
-            letterSpacing:"-0.03em",
-            background:`linear-gradient(135deg,${LT.text} 0%,${LT.textSub} 100%)`,
-            WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
-            Land your dream job faster
+    <div style={{ minHeight:"100vh", background:"#F5F7FB", padding:"32px 20px" }}>
+      <main style={{ maxWidth:980, margin:"0 auto", display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:24 }}>
+        <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:28 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#5C6B8A", marginBottom:12 }}>EARLY TOOL · MVP</div>
+          <h1 style={{ fontSize:34, lineHeight:1.2, margin:"0 0 10px", color:"#0F172A" }}>
+            Track jobs and tailor applications faster.
           </h1>
-          <p style={{ fontSize:20, lineHeight:1.7, color:LT.textSub, marginBottom:40, maxWidth:540 }}>
-            Track applications, tailor your resume with AI, and get personalized job recommendations.
-            Built for job seekers who want results.
+          <p style={{ fontSize:15, lineHeight:1.6, color:"#475569", margin:"0 0 16px" }}>
+            Built for active job seekers who want a simple tracker plus practical AI tailoring in one place.
           </p>
-          <div style={{ display:"flex", gap:16, marginBottom:48 }}>
-            {[
-              { icon:"🎯", title:"Smart Tracking",   sub:"Never lose track",  color:LT.primary },
-              { icon:"✨", title:"AI Tailoring",     sub:"Perfect every time", color:LT.accent  },
-              { icon:"🧭", title:"Role Suggestions", sub:"Find your fit",      color:LT.purple  },
-            ].map(f=>(
-              <div key={f.title} style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <div style={{ width:44, height:44, background:`${f.color}15`, border:`1px solid ${f.color}30`,
-                  borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>{f.icon}</div>
-                <div>
-                  <div style={{ fontSize:14, fontWeight:700, color:LT.text }}>{f.title}</div>
-                  <div style={{ fontSize:12, color:LT.textMute }}>{f.sub}</div>
-                </div>
-              </div>
-            ))}
+          <ul style={{ margin:"0 0 18px 18px", color:"#334155", lineHeight:1.8, fontSize:14 }}>
+            <li>Save jobs from one search flow and keep statuses updated.</li>
+            <li>Generate tailored application content from your own documents.</li>
+            <li>Weekly limits keep usage predictable while we improve reliability.</li>
+          </ul>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+            <button onClick={()=>setIsLogin(true)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
+              Start tracking jobs
+            </button>
+            <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid #D0D7E2", borderRadius:8, color:"#334155", textDecoration:"none", fontWeight:600 }}>
+              Send feedback
+            </a>
           </div>
-          <div style={{ display:"flex", gap:48, padding:"32px 0",
-            borderTop:`1px solid ${LT.border}`, borderBottom:`1px solid ${LT.border}` }}>
-            {[["10K+","Active Users",LT.primary],["95%","Success Rate",LT.accent],["2.5x","Faster Results",LT.green]].map(([n,l,c])=>(
-              <div key={l}>
-                <div style={{ fontSize:36, fontWeight:800, color:c, marginBottom:4 }}>{n}</div>
-                <div style={{ fontSize:13, color:LT.textMute, fontWeight:500 }}>{l}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </section>
 
-        {/* Right form */}
-        <div style={{ width:460, flexShrink:0, animation:"slideInRight 0.8s ease-out 0.2s backwards" }}>
-          <div style={{ background:LT.surface, border:`1px solid ${LT.border}`, borderRadius:20,
-            padding:40, boxShadow:`0 20px 60px ${LT.bg}80,0 0 1px ${LT.border}`, backdropFilter:"blur(20px)" }}>
+        <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:24 }}>
+          <h2 style={{ fontSize:20, margin:"0 0 6px", color:"#0F172A" }}>
+            {isLogin ? "Sign in" : "Create account"}
+          </h2>
+          <p style={{ fontSize:13, color:"#64748B", margin:"0 0 16px" }}>
+            {isLogin ? "Continue where you left off." : "Create an account to start tracking."}
+          </p>
 
-            <div style={{ marginBottom:28, textAlign:"center" }}>
-              <h2 style={{ fontSize:26, fontWeight:800, color:LT.text, marginBottom:8, letterSpacing:"-0.02em" }}>
-                {isLogin ? "Welcome back" : "Create account"}
-              </h2>
-              <p style={{ fontSize:14, color:LT.textSub }}>
-                {isLogin ? "Sign in to continue your job search" : "Start your job search journey"}
-              </p>
+          {error && (
+            <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
+              padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }}>
+              {error}
             </div>
+          )}
 
-            {/* Error message */}
-            {error && (
-              <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
-                padding:"10px 14px", marginBottom:20, fontSize:13, color:"#DC2626", textAlign:"center" }}>
-                {error}
+          <form onSubmit={handleSubmit}>
+            {!isLogin && (
+              <div style={{ marginBottom:12 }}>
+                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
+                <input type="text" value={name} onChange={e=>setName(e.target.value)}
+                  placeholder="Jane Smith" required style={inputStyle}/>
               </div>
             )}
 
-            <form onSubmit={handleSubmit}>
-              {!isLogin && (
-                <div style={{ marginBottom:18 }}>
-                  <label style={{ display:"block", fontSize:13, fontWeight:600, color:LT.textSub, marginBottom:7 }}>Full Name</label>
-                  <input type="text" value={name} onChange={e=>setName(e.target.value)}
-                    placeholder="Jane Smith" required style={inputStyle}
-                    onFocus={e=>{e.target.style.borderColor=LT.primary;e.target.style.boxShadow=`0 0 0 3px ${LT.primary}15`;}}
-                    onBlur={e=>{e.target.style.borderColor=LT.border;e.target.style.boxShadow="none";}}/>
-                </div>
-              )}
-
-              <div style={{ marginBottom:18 }}>
-                <label style={{ display:"block", fontSize:13, fontWeight:600, color:LT.textSub, marginBottom:7 }}>Email</label>
-                <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                  placeholder="you@example.com" required style={inputStyle}
-                  onFocus={e=>{e.target.style.borderColor=LT.primary;e.target.style.boxShadow=`0 0 0 3px ${LT.primary}15`;}}
-                  onBlur={e=>{e.target.style.borderColor=LT.border;e.target.style.boxShadow="none";}}/>
-              </div>
-
-              <div style={{ marginBottom: isLogin ? 10 : 24 }}>
-                <label style={{ display:"block", fontSize:13, fontWeight:600, color:LT.textSub, marginBottom:7 }}>Password</label>
-                <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
-                  placeholder="••••••••" required minLength={6} style={inputStyle}
-                  onFocus={e=>{e.target.style.borderColor=LT.primary;e.target.style.boxShadow=`0 0 0 3px ${LT.primary}15`;}}
-                  onBlur={e=>{e.target.style.borderColor=LT.border;e.target.style.boxShadow="none";}}/>
-              </div>
-
-              {isLogin && (
-                <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:22 }}>
-                  <a href="#" style={{ fontSize:13, color:LT.primary, textDecoration:"none", fontWeight:600 }}
-                    onMouseEnter={e=>e.target.style.color=LT.primaryLight}
-                    onMouseLeave={e=>e.target.style.color=LT.primary}>
-                    Forgot password?
-                  </a>
-                </div>
-              )}
-
-              <button type="submit" disabled={loading} style={{
-                width:"100%", background:loading?LT.textMute:`linear-gradient(135deg,${LT.primary},${LT.primaryDark})`,
-                color:"#fff", border:"none", borderRadius:10, padding:"14px", fontSize:15, fontWeight:700,
-                cursor:loading?"not-allowed":"pointer", transition:"all 0.2s",
-                boxShadow:loading?"none":`0 4px 20px ${LT.primary}40`, fontFamily:"inherit",
-                display:"flex", alignItems:"center", justifyContent:"center", gap:8
-              }}
-                onMouseEnter={e=>{if(!loading){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=`0 6px 25px ${LT.primary}50`;}}}
-                onMouseLeave={e=>{if(!loading){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 4px 20px ${LT.primary}40`;}}}>
-                {loading && <div style={{ width:16, height:16, border:"2px solid #ffffff40", borderTopColor:"#fff", borderRadius:"50%", animation:"spin 0.6s linear infinite" }}/>}
-                {loading ? "Please wait..." : (isLogin ? "Sign In →" : "Create Account →")}
-              </button>
-            </form>
-
-            <div style={{ marginTop:24, textAlign:"center", fontSize:13, color:LT.textSub }}>
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
-              <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
-                background:"none", border:"none", color:LT.primary, fontWeight:700,
-                cursor:"pointer", fontSize:13, fontFamily:"inherit"
-              }} onMouseEnter={e=>e.target.style.color=LT.primaryLight}
-                 onMouseLeave={e=>e.target.style.color=LT.primary}>
-                {isLogin ? "Sign up free" : "Sign in"}
-              </button>
+            <div style={{ marginBottom:12 }}>
+              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                placeholder="you@example.com" required style={inputStyle}/>
             </div>
 
-            <div style={{ marginTop:20, textAlign:"center", fontSize:11, color:LT.textMute,
-              display:"flex", justifyContent:"center", gap:12, opacity:0.7 }}>
-              <span>🔒 Encrypted</span><span>•</span><span>GDPR Compliant</span><span>•</span><span>No spam</span>
+            <div style={{ marginBottom:16 }}>
+              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+                placeholder="At least 6 characters" required minLength={6} style={inputStyle}/>
             </div>
+
+            <button type="submit" disabled={loading} style={{
+              width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8,
+              padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
+            }}>
+              {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
+            </button>
+          </form>
+
+          <div style={{ marginTop:12, fontSize:12, color:"#64748B" }}>
+            {isLogin ? "No account yet? " : "Already have an account? "}
+            <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
+              background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
+            }}>
+              {isLogin ? "Create one" : "Sign in"}
+            </button>
           </div>
-        </div>
+        </section>
       </main>
     </div>
   );
@@ -525,29 +472,27 @@ const store = {
     if (error) throw error;
     return data;
   },
-};
 
-const billingApi = {
-  startCheckout: async () => {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-      body: {},
-    });
+  getTailoringQuota: async () => {
+    const { supabase } = await getAuthContext();
+    const { data, error } = await supabase.rpc("get_tailoring_quota");
+    if (error?.code === "42883") {
+      return { weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null, misconfigured: true };
+    }
     if (error) throw error;
-    if (!data?.url) throw new Error(data?.error || "Could not create checkout session.");
-    return data.url;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row || { weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null };
   },
 
-  openPortal: async () => {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke("create-portal-session", {
-      body: {},
-    });
+  consumeTailoringUse: async (jobId) => {
+    const { supabase } = await getAuthContext();
+    const { data, error } = await supabase.rpc("consume_tailoring_use", { p_job_id: jobId || null });
     if (error) throw error;
-    if (!data?.url) throw new Error(data?.error || "Could not create billing portal session.");
-    return data.url;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row;
   },
 };
+
 function exportCSV(jobs,docs) {
   const hdrs=["Job Title","Company","Location","URL","Date Saved","Status","Notes","Resume Used","Cover Letter Used"];
   const rows=jobs.map(j=>{
@@ -562,7 +507,6 @@ function exportCSV(jobs,docs) {
 
 // ─── Design primitives ────────────────────────────────────────────────────────
 function FL({children}){return <div style={{fontSize:11,fontWeight:700,color:T.textMute,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>{children}</div>;}
-function Divider(){return <div style={{height:1,background:T.border,margin:"18px 0"}}/>;}
 function SH({icon,title}){return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{fontSize:16}}>{icon}</span><span style={{fontSize:14,fontWeight:750,color:T.text}}>{title}</span></div>;}
 function PH({title,subtitle,action}){
   return <div style={{padding:"30px 32px 8px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",flexShrink:0}}>
@@ -575,11 +519,6 @@ function PH({title,subtitle,action}){
 }
 function Card({children,style:s}){return <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:20,boxShadow:"0 8px 28px rgba(15,23,42,0.04)",...s}}>{children}</div>;}
 function Chip({label,color}){return <span style={{fontSize:12,fontWeight:600,color,background:color+"18",border:`1px solid ${color}30`,borderRadius:20,padding:"3px 11px"}}>{label}</span>;}
-
-function StatusBadge({status}){
-  const m=STATUS_META[status]||STATUS_META.saved;
-  return <span style={{background:m.bg,color:m.color,border:`1px solid ${m.border}`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700,letterSpacing:"0.03em",whiteSpace:"nowrap"}}>{m.label}</span>;
-}
 function Spinner({color=T.primary}){return <span style={{display:"inline-block",width:13,height:13,border:`2px solid ${color}30`,borderTopColor:color,borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}}/>;}
 
 function Btn({onClick,children,variant="primary",small,full,disabled,style:s}){
@@ -852,103 +791,20 @@ function ProfileView({docs,setDocs,userName}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // SUGGESTED ROLES VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function SuggestedView({docs,jobs,setJobs}){
-  const [roles,setRoles]=useState([]);
-  const [loading,setLoading]=useState(false);
-  const [error,setError]=useState("");
-  const [generated,setGenerated]=useState(false);
-  const [profile,setProfile]=useState({});
-  const [savingRoleKey,setSavingRoleKey]=useState("");
-  useEffect(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); },[]);
-  const resume=docs.find(d=>d.type==="resume");
-
-  async function generate(){
-    setLoading(true);setError("");setRoles([]);
-    try{
-      const raw=await callClaude(
-        `You are a career advisor. Based on the user's profile and resume, suggest 8 specific job roles they are well-suited for. Return ONLY valid JSON: array of objects with keys: title, category, whyFit (1 sentence), typicalCompanies (array of 3 strings), salaryRange (string), growthOutlook ("High"|"Medium"|"Low"), skills (array of 3-5 strings).`,
-        `Name: ${profile.name||"Not set"}\nTarget titles: ${profile.targetTitle||"Not specified"}\nIndustry: ${profile.industry||"Not specified"}\nSeniority: ${profile.seniority||"Not specified"}\nKeywords: ${profile.keywords||"None"}${profile.useCompanyPrefs&&profile.lifestyleVibe?`\nCulture preference: ${profile.lifestyleVibe}`:""}${profile.useCompanyPrefs&&profile.targetCompanies?`\nTarget companies: ${profile.targetCompanies}`:""}\nResume: ${resume?.content?.slice(0,800)||"Not provided"}`,
-        2000
-      );
-      setRoles(JSON.parse(raw.replace(/```json|```/g,"").trim()));setGenerated(true);
-    }catch(e){setError(e?.message || "Could not generate suggestions. Try again.");}
-    setLoading(false);
-  }
-
-  async function saveRole(role){
-    if(jobs.find(j=>j.title===role.title&&j.company==="(Suggested Role)"))return;
-    const roleKey = `${role.title}::${role.category || ""}`;
-    setSavingRoleKey(roleKey);
-    try{
-      const saved=await store.insertJob({title:role.title,company:"(Suggested Role)",location:"",url:"",description:role.whyFit,status:"saved",notes:""});
-      setJobs(prev=>[saved,...prev]);
-    }catch(e){setError(`Error saving role: ${e.message}`);}
-    finally{setSavingRoleKey("");}
-  }
-
-  const gc=g=>g==="High"?T.green:g==="Medium"?T.amber:T.textMute;
-  const gb=g=>g==="High"?T.greenBg:g==="Medium"?T.amberBg:T.bg;
-
+function SuggestedView(){
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Suggested Roles" subtitle="AI-powered role suggestions based on your profile"
-        action={<Btn onClick={generate} disabled={loading}>{loading?<><Spinner color="#fff"/> Analyzing…</>:generated?"↺ Regenerate":"✨ Generate Suggestions"}</Btn>}/>
-      <div style={{padding:"18px 32px 30px",maxWidth:1180,margin:"0 auto"}}>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
-          {profile.targetTitle&&<Chip label={"🎯 "+profile.targetTitle} color={T.primary}/>}
-          {profile.industry&&<Chip label={"🏭 "+profile.industry} color={T.teal}/>}
-          {profile.seniority&&<Chip label={"📈 "+profile.seniority} color={T.violet}/>}
-          {profile.useCompanyPrefs&&profile.lifestyleVibe&&<Chip label={"✨ "+profile.lifestyleVibe.slice(0,40)} color={T.amber}/>}
-          {!profile.targetTitle&&!profile.industry&&<div style={{fontSize:13,color:T.textMute}}>Fill out your Profile to get better suggestions.</div>}
-        </div>
-
-        {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:16}}>{error}</div>}
-
-        {!generated&&!loading&&(
-          <div style={{textAlign:"center",padding:"80px 0",color:T.textMute}}>
-            <div style={{fontSize:44,marginBottom:14}}>🧭</div>
-            <div style={{fontSize:15,fontWeight:600,color:T.textSub,marginBottom:6}}>Discover your best-fit roles</div>
-            <div style={{fontSize:13,maxWidth:380,margin:"0 auto"}}>Click "Generate Suggestions" to get personalized role recommendations.</div>
+      <PH title="Suggested Jobs" subtitle="Coming soon"/>
+      <div style={{padding:"18px 32px 30px",maxWidth:980,margin:"0 auto"}}>
+        <Card style={{opacity:0.6, borderStyle:"dashed"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontSize:16,fontWeight:750,color:T.text}}>Suggested Jobs</div>
+            <span style={{fontSize:11,fontWeight:700,padding:"4px 8px",borderRadius:999,border:`1px solid ${T.border}`,color:T.textSub}}>Coming Soon</span>
           </div>
-        )}
-
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
-          {roles.map((role,i)=>{
-            const saved=jobs.find(j=>j.title===role.title&&j.company==="(Suggested Role)");
-            const roleKey = `${role.title}::${role.category || ""}`;
-            const saving = savingRoleKey === roleKey;
-            return(
-              <Card key={i} style={{display:"flex",flexDirection:"column"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                  <div style={{flex:1,marginRight:10}}>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:2}}>{role.title}</div>
-                    <div style={{fontSize:12,color:T.primary,fontWeight:600}}>{role.category}</div>
-                  </div>
-                  <span style={{fontSize:11,fontWeight:700,color:gc(role.growthOutlook),background:gb(role.growthOutlook),borderRadius:20,padding:"2px 9px",border:`1px solid ${gc(role.growthOutlook)}30`,whiteSpace:"nowrap"}}>{role.growthOutlook} Growth</span>
-                </div>
-                <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>{role.whyFit}</div>
-                {role.salaryRange&&<div style={{fontSize:12,color:T.text,fontWeight:600,marginBottom:10}}>💰 {role.salaryRange}</div>}
-                <div style={{marginBottom:10}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMute,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase"}}>Key Skills</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {role.skills?.map(s=><span key={s} style={{fontSize:11,color:T.teal,background:T.tealBg,border:`1px solid ${T.tealBorder}`,borderRadius:20,padding:"2px 8px",fontWeight:600}}>{s}</span>)}
-                  </div>
-                </div>
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMute,marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase"}}>Typical Companies</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {role.typicalCompanies?.map(c=><span key={c} style={{fontSize:11,color:T.textSub,background:T.bg,border:`1px solid ${T.border}`,borderRadius:6,padding:"2px 8px"}}>{c}</span>)}
-                  </div>
-                </div>
-                <div style={{marginTop:"auto",paddingTop:10,borderTop:`1px solid ${T.border}`}}>
-                  <Btn onClick={()=>saveRole(role)} disabled={saving || saved} variant={saved?"success":"secondary"} small full>
-                    {saving ? <><Spinner/> Saving…</> : saved?"✓ Added to Tracker":"+ Add to Tracker"}
-                  </Btn>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+          <div style={{fontSize:13,color:T.textSub,lineHeight:1.7}}>
+            This section is intentionally disabled while we stabilize job board search and tailoring quality.
+          </div>
+        </Card>
       </div>
     </div>
   );
@@ -961,24 +817,16 @@ function SearchView({jobs,setJobs}){
   const [query,setQuery]=useState("");
   const [results,setResults]=useState([]);
   const [loading,setLoading]=useState(false);
-  const [parsed,setParsed]=useState(null);
   const [error,setError]=useState("");
-  const [profile,setProfile]=useState({});
   const [savingJobKey,setSavingJobKey]=useState("");
-  useEffect(()=>{ store.getProfile().then(p=>{ if(p) setProfile(p); }).catch(()=>{}); },[]);
 
   async function search(){
     if(!query.trim())return;
-    setLoading(true);setError("");setResults([]);setParsed(null);
+    setLoading(true);setError("");setResults([]);
     try{
-      const raw=await callClaude(
-        `You are a job search assistant. Parse the query and return ONLY valid JSON with keys: "parsed" (title, seniority, keywords array, location, remote boolean, industry) and "listings" (array of 6: title, company, location, url, description).`,
-        `Query: ${query}${profile.targetTitle?`\nUser targets: ${profile.targetTitle}`:""}${profile.keywords?`\nUser keywords: ${profile.keywords}`:""}${profile.useCompanyPrefs&&profile.targetCompanies?`\nPreferred companies: ${profile.targetCompanies}`:""}${profile.useCompanyPrefs&&profile.lifestyleVibe?`\nCulture: ${profile.lifestyleVibe}`:""}`,
-        2000
-      );
-      const data=JSON.parse(raw.replace(/```json|```/g,"").trim());
-      setParsed(data.parsed);setResults(data.listings||[]);
-    }catch(e){setError(e?.message || "Search failed — try rephrasing.");}
+      const jobsFromApi = await searchJobsByKeyword(query.trim());
+      setResults(jobsFromApi);
+    }catch(e){setError(e?.message || "Search failed. Check job board API setup.");}
     setLoading(false);
   }
 
@@ -987,7 +835,15 @@ function SearchView({jobs,setJobs}){
     const jobKey = `${job.title}::${job.company}`;
     setSavingJobKey(jobKey);
     try{
-      const saved=await store.insertJob({...job,status:"saved",notes:""});
+      const saved=await store.insertJob({
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        description: job.description,
+        url: job.apply_url,
+        status:"saved",
+        notes:"",
+      });
       setJobs(prev=>[saved,...prev]);
     }catch(e){setError(`Error saving job: ${e.message}`);}
     finally{setSavingJobKey("");}
@@ -995,29 +851,14 @@ function SearchView({jobs,setJobs}){
 
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Job Search" subtitle="Describe your ideal role in plain English"/>
+      <PH title="Job Search" subtitle="Keyword search powered by a job board API (no AI ranking)."/>
       <div style={{padding:"18px 32px 30px",maxWidth:1180,margin:"0 auto"}}>
-        {profile.useCompanyPrefs&&(profile.targetCompanies||profile.lifestyleVibe)&&(
-          <div style={{fontSize:12,color:T.violet,background:T.violetBg,border:`1px solid ${T.violetBorder}`,borderRadius:8,padding:"8px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
-            <span>✦</span><span><strong>Profile preferences active:</strong> company type and culture vibe are included in your search.</span>
-          </div>
-        )}
         <div style={{display:"flex",gap:10,marginBottom:18}}>
-          <AppInput value={query} onChange={setQuery} placeholder='e.g. "Remote senior product designer at a fintech startup"' style={{flex:1}}
+          <AppInput value={query} onChange={setQuery} placeholder='e.g. sales manager, remote data analyst, product designer' style={{flex:1}}
             onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
           <Btn onClick={search} disabled={loading}>{loading?<><Spinner color="#fff"/> Searching…</>:"Search"}</Btn>
         </div>
         {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:16}}>{error}</div>}
-        {parsed&&(
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:18,alignItems:"center"}}>
-            {[["Role",parsed.title],["Level",parsed.seniority],["Location",parsed.location],["Remote",parsed.remote?"Yes":null],["Industry",parsed.industry]].map(([k,v])=>v&&(
-              <div key={k} style={{fontSize:12,background:T.primaryLight,border:`1px solid ${T.primaryMid}`,borderRadius:6,padding:"3px 10px"}}>
-                <span style={{color:T.textMute}}>{k}: </span><span style={{color:T.primary,fontWeight:600}}>{v}</span>
-              </div>
-            ))}
-            {parsed.keywords?.map(kw=><span key={kw} style={{fontSize:11,color:T.teal,background:T.tealBg,border:`1px solid ${T.tealBorder}`,borderRadius:20,padding:"3px 10px",fontWeight:600}}>{kw}</span>)}
-          </div>
-        )}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
           {results.map((job,i)=>{
             const isSaved=jobs.find(j=>j.title===job.title&&j.company===job.company);
@@ -1036,6 +877,10 @@ function SearchView({jobs,setJobs}){
                   </Btn>
                 </div>
                 <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>{job.description}</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+                  <span style={{fontSize:11,color:T.textMute}}>Source: {job.source || "job_board_api"}</span>
+                  {job.apply_url && <a href={job.apply_url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>View</a>}
+                </div>
               </Card>
             );
           })}
@@ -1049,13 +894,20 @@ function SearchView({jobs,setJobs}){
 // TRACKER VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
 function TrackerView({jobs,setJobs,docs}){
-  const [openId,setOpenId]=useState(null);
-  const [editNotes,setEditNotes]=useState("");
-  const [editingNoteId,setEditingNoteId]=useState(null);
   const [filterStatus,setFilterStatus]=useState("all");
   const [sortBy,setSortBy]=useState("date");
   const [trackerMsg,setTrackerMsg]=useState("");
   const [trackerErr,setTrackerErr]=useState("");
+  const [tailorModalJobId,setTailorModalJobId]=useState(null);
+  const [tailorInputs,setTailorInputs]=useState({
+    excitement: "",
+    emphasis: "",
+    avoid: "",
+    resumeId: "",
+    coverId: "",
+  });
+  const [tailorLoading,setTailorLoading]=useState(false);
+  const [quota,setQuota]=useState({ weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null });
 
   async function updateStatus(id,status){
     setTrackerErr("");
@@ -1069,20 +921,19 @@ function TrackerView({jobs,setJobs,docs}){
       setTrackerErr(`Could not update status: ${e.message}`);
     }
   }
-  async function saveNotes(id){
+  async function saveNotes(id, notesValue){
     setTrackerErr("");
     const prev = jobs;
-    const u=jobs.map(j=>j.id===id?{...j,notes:editNotes}:j);
+    const u=jobs.map(j=>j.id===id?{...j,notes:notesValue}:j);
     setJobs(u);
     try{
-      await store.updateJob(id,{notes:editNotes});
+      await store.updateJob(id,{notes:notesValue});
       setTrackerMsg("Notes saved.");
       setTimeout(()=>setTrackerMsg(""),1500);
     }catch(e){
       setJobs(prev);
       setTrackerErr(`Could not save notes: ${e.message}`);
     }
-    setEditingNoteId(null);
   }
   async function deleteJob(id){
     setTrackerErr("");
@@ -1095,8 +946,13 @@ function TrackerView({jobs,setJobs,docs}){
       setJobs(prev);
       setTrackerErr(`Could not delete job: ${e.message}`);
     }
-    if(openId===id)setOpenId(null);
   }
+
+  useEffect(() => {
+    store.getTailoringQuota()
+      .then((q) => setQuota(q))
+      .catch(() => setTrackerErr("Tailoring limit configuration is missing. Run supabase/tailoring_limits.sql."));
+  }, []);
 
   const filtered=jobs.filter(j=>filterStatus==="all"||j.status===filterStatus).sort((a,b)=>{
     if(sortBy==="date"){
@@ -1108,6 +964,78 @@ function TrackerView({jobs,setJobs,docs}){
     return(a.title||"").localeCompare(b.title||"");
   });
   const counts=STATUS_OPTIONS.reduce((acc,s)=>({...acc,[s]:jobs.filter(j=>j.status===s).length}),{});
+  const resumes = docs.filter((d) => d.type === "resume");
+  const covers = docs.filter((d) => d.type === "cover_letter");
+  const selectedTailorJob = jobs.find((j) => j.id === tailorModalJobId) || null;
+
+  function openTailorModal(job) {
+    setTailorModalJobId(job.id);
+    setTailorInputs({
+      excitement: "",
+      emphasis: "",
+      avoid: "",
+      resumeId: job.resumeDocId || resumes[0]?.id || "",
+      coverId: job.coverDocId || covers[0]?.id || "",
+    });
+    setTrackerErr("");
+  }
+
+  async function generateTailoredApplication() {
+    if (!selectedTailorJob) return;
+    const resume = docs.find((d) => d.id === tailorInputs.resumeId);
+    const cover = docs.find((d) => d.id === tailorInputs.coverId);
+    if (!resume && !cover) {
+      setTrackerErr("Select at least one document.");
+      return;
+    }
+    if (!selectedTailorJob.description?.trim()) {
+      setTrackerErr("This job has no description. Add one from Job Search before tailoring.");
+      return;
+    }
+    if (quota.remaining <= 0) {
+      setTrackerErr("Weekly tailoring limit reached. Please wait for reset.");
+      return;
+    }
+
+    setTailorLoading(true);
+    setTrackerErr("");
+    try {
+      const updatedQuota = await store.consumeTailoringUse(selectedTailorJob.id);
+      setQuota(updatedQuota);
+
+      const raw = await callClaude(
+        "You generate concise, professional, factual application content. Return only JSON with keys: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score.",
+        `Job Description:\n${selectedTailorJob.description}\n\nResume:\n${resume?.content || "(not provided)"}\n\nCover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`
+      );
+      let data;
+      try {
+        data = JSON.parse(raw.replace(/```json|```/g,"").trim());
+      } catch {
+        throw new Error("AI response format error. Please try again.");
+      }
+      const updates = {
+        tailoredResume: data.tailored_resume_summary || "",
+        tailoredCover: data.tailored_cover_letter || "",
+        keywords: Array.isArray(data.keyword_alignment) ? data.keyword_alignment : [],
+        matchScore: Number.isFinite(data.match_score) ? data.match_score : null,
+        resumeDocId: resume?.id || null,
+        coverDocId: cover?.id || null,
+      };
+      const dbRow = await store.updateJob(selectedTailorJob.id, updates);
+      setJobs((prev) => prev.map((j) => (j.id === selectedTailorJob.id ? { ...j, ...dbRow } : j)));
+      setTrackerMsg("Tailored application generated.");
+      setTimeout(()=>setTrackerMsg(""),2000);
+      setTailorModalJobId(null);
+    } catch (e) {
+      if ((e?.message || "").includes("WEEKLY_LIMIT_REACHED")) {
+        setTrackerErr("You have reached 7 tailored applications for this week.");
+      } else {
+        setTrackerErr(`Tailoring failed: ${e.message || e}`);
+      }
+    } finally {
+      setTailorLoading(false);
+    }
+  }
 
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
@@ -1146,6 +1074,13 @@ function TrackerView({jobs,setJobs,docs}){
         </div>
       )}
 
+      <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
+        <div style={{fontSize:12,color:T.textSub}}>
+          Tailoring remaining this week: <strong style={{color:T.text}}>{quota.remaining ?? 0}</strong> / {quota.weekly_limit || WEEKLY_TAILOR_LIMIT}
+          {quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
+        </div>
+      </div>
+
       <div style={{flex:1,overflow:"auto",padding:"12px 32px 24px",maxWidth:1180,margin:"0 auto",width:"100%"}}>
         {filtered.length===0&&(
           <div style={{textAlign:"center",padding:"60px 0",color:T.textMute}}>
@@ -1155,247 +1090,87 @@ function TrackerView({jobs,setJobs,docs}){
           </div>
         )}
         {filtered.length>0&&(
-          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1.4fr 1fr 100px 130px 32px",padding:"10px 16px",
-              background:T.bg,borderBottom:`1px solid ${T.border}`,
-              fontSize:11,fontWeight:700,color:T.textMute,letterSpacing:"0.05em",textTransform:"uppercase",gap:12}}>
-              <div>Role</div><div>Company</div><div>Location</div><div>Date</div><div>Status</div><div/>
-            </div>
-            {filtered.map((job,i)=>{
-              const isOpen=openId===job.id;
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+            {filtered.map((job)=>{
               const m=STATUS_META[job.status]||STATUS_META.saved;
               return(
-                <div key={job.id} style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
-                  <div onClick={()=>setOpenId(isOpen?null:job.id)}
-                    style={{display:"grid",gridTemplateColumns:"2fr 1.4fr 1fr 100px 130px 32px",
-                      padding:"12px 16px",gap:12,cursor:"pointer",alignItems:"center",
-                      background:isOpen?T.primaryLight:"transparent",transition:"background 0.1s",
-                      borderLeft:`3px solid ${isOpen?T.primary:"transparent"}`}}>
+                <Card key={job.id}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
                     <div>
-                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{job.title||"—"}</div>
-                      {job.notes&&!isOpen&&<div style={{fontSize:11,color:T.textMute,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>📝 {job.notes}</div>}
+                      <div style={{fontSize:16,fontWeight:750,color:T.text}}>{job.title||"—"}</div>
+                      <div style={{fontSize:13,color:T.primary,fontWeight:600,marginTop:2}}>{job.company||"—"}</div>
+                      <div style={{fontSize:12,color:T.textMute,marginTop:2}}>{job.location||"—"} · {formatDate(job.savedAt || job.created_at)}</div>
                     </div>
-                    <div style={{fontSize:13,color:T.primary,fontWeight:500}}>{job.company||"—"}</div>
-                    <div style={{fontSize:12,color:T.textSub}}>{job.location||"—"}</div>
-                    <div style={{fontSize:12,color:T.textMute}}>{formatDate(job.savedAt || job.created_at)}</div>
-                    <div onClick={e=>e.stopPropagation()}>
-                      <Sel value={job.status} onChange={v=>updateStatus(job.id,v)}
-                        options={STATUS_OPTIONS.map(s=>({value:s,label:STATUS_META[s].label}))}
-                        style={{padding:"4px 8px",fontSize:12,color:m.color,background:m.bg,border:`1px solid ${m.border}`,borderRadius:20}}/>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"center"}}>
-                      <span style={{fontSize:13,color:T.textMute,display:"inline-block",transform:isOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.15s"}}>▾</span>
+                    <Sel value={job.status} onChange={v=>updateStatus(job.id,v)}
+                      options={STATUS_OPTIONS.map(s=>({value:s,label:STATUS_META[s].label}))}
+                      style={{padding:"4px 8px",fontSize:12,color:m.color,background:m.bg,border:`1px solid ${m.border}`,borderRadius:20,minWidth:120}}/>
+                  </div>
+
+                  <div style={{marginBottom:8}}>
+                    <FL>Notes</FL>
+                    <TA value={job.notes || ""} onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,notes:v}:j))} rows={2}/>
+                    <div style={{marginTop:6}}>
+                      <Btn small variant="ghost" onClick={()=>saveNotes(job.id, jobs.find(j=>j.id===job.id)?.notes || "")}>Save Notes</Btn>
                     </div>
                   </div>
 
-                  {isOpen&&(
-                    <div style={{background:"#FAFBFF",borderTop:`1px solid ${T.primaryMid}`,padding:"16px 20px 16px 36px"}}>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20}}>
-                        <div>
-                          <FL>Notes</FL>
-                          {editingNoteId===job.id?(
-                            <><TA value={editNotes} onChange={setEditNotes} rows={3}/>
-                              <div style={{marginTop:8,display:"flex",gap:6}}>
-                                <Btn onClick={()=>saveNotes(job.id)} small>Save</Btn>
-                                <Btn onClick={()=>setEditingNoteId(null)} variant="ghost" small>Cancel</Btn>
-                              </div></>
-                          ):(
-                            <div onClick={()=>{setEditingNoteId(job.id);setEditNotes(job.notes||"");}}
-                              style={{fontSize:13,color:job.notes?T.textSub:T.textMute,background:T.surface,borderRadius:8,padding:"8px 12px",border:`1px dashed ${T.border}`,cursor:"pointer",minHeight:52,lineHeight:1.6}}>
-                              {job.notes||<em>Click to add notes…</em>}
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <FL>Tailored Resume Summary</FL>
-                          <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.surface,borderRadius:8,padding:"8px 12px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,maxHeight:100,overflow:"auto"}}>
-                            {job.tailoredResume||<em style={{color:T.textMute}}>Not tailored yet — use Tailor AI.</em>}
-                          </div>
-                        </div>
-                        <div>
-                          {job.keywords?.length>0&&(<>
-                            <FL>Keyword Match</FL>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-                              {job.keywords.map(kw=><span key={kw} style={{fontSize:11,color:T.teal,background:T.tealBg,border:`1px solid ${T.tealBorder}`,borderRadius:20,padding:"2px 7px",fontWeight:600}}>{kw}</span>)}
-                            </div>
-                          </>)}
-                          {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
-                          <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
-                        </div>
-                      </div>
+                  <div style={{marginBottom:10}}>
+                    <FL>Tailored Resume Summary</FL>
+                    <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6}}>
+                      {job.tailoredResume||<em>Not tailored yet.</em>}
                     </div>
-                  )}
-                </div>
+                  </div>
+
+                  {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
+
+                  <div style={{display:"flex",gap:8}}>
+                    <Btn onClick={()=>openTailorModal(job)} disabled={quota.remaining <= 0} variant="secondary" small>
+                      Tailor Application
+                    </Btn>
+                    <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
+                  </div>
+                </Card>
               );
             })}
           </div>
         )}
       </div>
-    </div>
-  );
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TAILOR VIEW
-// ═══════════════════════════════════════════════════════════════════════════════
-function TailorView({docs,jobs,setJobs,hasPremium,onUpgrade,billingLoading}){
-  const [resumeId,setResumeId]=useState("");
-  const [coverId,setCoverId]=useState("");
-  const [jobId,setJobId]=useState("");
-  const [jd,setJd]=useState("");
-  const [result,setResult]=useState(null);
-  const [loading,setLoading]=useState(false);
-  const [error,setError]=useState("");
-
-  if (!hasPremium) {
-    return (
-      <div style={{flex:1,overflow:"auto",background:T.bg}}>
-        <PH title="Tailor AI" subtitle="Premium feature"/>
-        <div style={{padding:"18px 32px",maxWidth:760}}>
-          <Card style={{border:`1px solid ${T.violetBorder}`,background:`linear-gradient(135deg,${T.surface} 0%,${T.violetBg} 100%)`}}>
-            <div style={{fontSize:15,fontWeight:800,color:T.text,marginBottom:8}}>Unlock Tailor AI</div>
-            <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:16}}>
-              Tailor AI generates targeted resume summaries, cover letters, and keyword alignment for each role.
+      {selectedTailorJob && (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"grid",placeItems:"center",zIndex:50,padding:20}}>
+          <div style={{width:"100%",maxWidth:680,background:"#fff",borderRadius:12,border:`1px solid ${T.border}`,padding:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:T.text}}>Tailor Application</div>
+                <div style={{fontSize:12,color:T.textSub}}>{selectedTailorJob.title} · {selectedTailorJob.company}</div>
+              </div>
+              <button onClick={()=>setTailorModalJobId(null)} style={{border:"none",background:"transparent",fontSize:20,cursor:"pointer",color:T.textMute}}>×</button>
             </div>
-            <Btn onClick={onUpgrade} disabled={billingLoading}>
-              {billingLoading ? <><Spinner color="#fff"/> Opening checkout…</> : "Upgrade to Pro"}
-            </Btn>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
-  const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
-  function onJobSel(id){setJobId(id);const j=jobs.find(x=>x.id===id);if(j?.description)setJd(j.description);}
-
-  async function tailor(){
-    const resume=docs.find(d=>d.id===resumeId); const cover=docs.find(d=>d.id===coverId);
-    if(!resume&&!cover){setError("Select at least one document.");return;}
-    if(!jd.trim()){setError("Paste a job description.");return;}
-    setLoading(true);setError("");setResult(null);
-    try{
-      const raw=await callClaude(
-        `Expert resume/cover letter editor. Rules: NEVER fabricate. Only reframe existing content. Mirror JD keywords. Return ONLY valid JSON: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score (0-100).`,
-        `Job Description:\n${jd}\n\nResume:\n${resume?.content||"(not provided)"}\n\nCover Letter:\n${cover?.content||"(not provided)"}`,
-        2000
-      );
-      const data=JSON.parse(raw.replace(/```json|```/g,"").trim());setResult(data);
-      if(jobId){
-        const updates={tailoredResume:data.tailored_resume_summary,tailoredCover:data.tailored_cover_letter,keywords:data.keyword_alignment,matchScore:data.match_score,resumeDocId:resumeId,coverDocId:coverId};
-        setJobs(prev=>prev.map(j=>j.id===jobId?{...j,...updates}:j));
-        try{await store.updateJob(jobId,updates);}catch(e){console.error(e);}
-      }
-    }catch(e){setError(e?.message || "Tailoring failed. Try again.");}
-    setLoading(false);
-  }
-
-  const sc=s=>s>70?T.green:s>40?T.amber:T.red;
-
-  return(
-    <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Tailor AI" subtitle="Customize your documents to match any job listing"/>
-      <div style={{padding:"18px 32px 30px",display:"flex",gap:20,flexWrap:"wrap",maxWidth:1180,margin:"0 auto"}}>
-        <div style={{flex:"1 1 320px",minWidth:0}}>
-          <Card>
-            <SH icon="1️⃣" title="Select documents"/>
-            <div style={{marginBottom:12}}><FL>Resume / CV</FL><Sel value={resumeId} onChange={setResumeId} options={[{value:"",label:"Select resume…"},...resumes.map(d=>({value:d.id,label:d.tag}))]}/></div>
-            <div style={{marginBottom:16}}><FL>Cover Letter</FL><Sel value={coverId} onChange={setCoverId} options={[{value:"",label:"Select cover letter…"},...covers.map(d=>({value:d.id,label:d.tag}))]}/></div>
-            <Divider/>
-            <SH icon="2️⃣" title="Job details"/>
-            <div style={{marginBottom:12}}><FL>Link to saved job (optional)</FL><Sel value={jobId} onChange={onJobSel} options={[{value:"",label:"Select saved job…"},...jobs.map(j=>({value:j.id,label:`${j.title} @ ${j.company}`}))]}/></div>
-            <div style={{marginBottom:16}}><FL>Job Description</FL><TA value={jd} onChange={setJd} placeholder="Paste the full job description here..." rows={10}/></div>
-            {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:12}}>{error}</div>}
-            <Btn onClick={tailor} full disabled={loading}>{loading?<><Spinner color="#fff"/> Tailoring…</>:"✨ Generate Tailored Content"}</Btn>
-          </Card>
-        </div>
-        <div style={{flex:"1 1 320px",minWidth:0}}>
-          {!result&&!loading&&(
-            <div style={{textAlign:"center",padding:"80px 20px",color:T.textMute}}>
-              <div style={{fontSize:44,marginBottom:12}}>✨</div>
-              <div style={{fontSize:15,fontWeight:600,marginBottom:6,color:T.textSub}}>Ready to tailor</div>
-              <div style={{fontSize:13}}>Select documents and paste a job description</div>
+            <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>
+              Remaining this week: <strong style={{color:T.text}}>{quota.remaining}</strong> / {quota.weekly_limit}
+              {quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
             </div>
-          )}
-          {result&&(
-            <div style={{display:"flex",flexDirection:"column",gap:16}}>
-              <Card style={{borderColor:sc(result.match_score)+"50"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>Match Score</div>
-                  <div style={{fontSize:30,fontWeight:800,color:sc(result.match_score)}}>{result.match_score}%</div>
-                </div>
-                <div style={{width:"100%",height:6,background:T.border,borderRadius:99,overflow:"hidden",marginBottom:10}}>
-                  <div style={{height:"100%",width:`${result.match_score}%`,background:sc(result.match_score),borderRadius:99,transition:"width 0.8s ease"}}/>
-                </div>
-                <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>{result.skills_match_summary}</div>
-              </Card>
-              <Card><FL>Keyword Alignment</FL>
-                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {result.keyword_alignment?.map(kw=><span key={kw} style={{fontSize:12,color:T.teal,background:T.tealBg,border:`1px solid ${T.tealBorder}`,borderRadius:20,padding:"3px 10px",fontWeight:600}}>{kw}</span>)}
-                </div>
-              </Card>
-              {result.tailored_resume_summary&&(
-                <Card>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <FL>Tailored Resume Summary</FL>
-                    <Btn onClick={()=>navigator.clipboard.writeText(result.tailored_resume_summary)} variant="ghost" small>Copy</Btn>
-                  </div>
-                  <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{result.tailored_resume_summary}</div>
-                </Card>
-              )}
-              {result.tailored_cover_letter&&(
-                <Card>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <FL>Tailored Cover Letter</FL>
-                    <Btn onClick={()=>navigator.clipboard.writeText(result.tailored_cover_letter)} variant="ghost" small>Copy</Btn>
-                  </div>
-                  <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{result.tailored_cover_letter}</div>
-                </Card>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function BillingView({subscription,hasPremium,onCheckout,onPortal,onRefresh,loading}){
-  const status = subscription?.status || "inactive";
-  const renewalDate = subscription?.current_period_end
-    ? new Date(subscription.current_period_end).toLocaleDateString()
-    : null;
-
-  return (
-    <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Billing" subtitle="Manage your subscription"/>
-      <div style={{padding:"18px 32px",maxWidth:760,display:"grid",gap:16}}>
-        <Card style={{borderColor:hasPremium?T.greenBorder:T.violetBorder}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
-            <div style={{fontSize:15,fontWeight:800,color:T.text}}>
-              {hasPremium ? "Pro Plan Active" : "Free Plan"}
+            <div style={{display:"grid",gap:10}}>
+              <div><FL>What excites you about this role?</FL><TA value={tailorInputs.excitement} onChange={(v)=>setTailorInputs(p=>({...p,excitement:v}))} rows={3}/></div>
+              <div><FL>Relevant experience to emphasize</FL><TA value={tailorInputs.emphasis} onChange={(v)=>setTailorInputs(p=>({...p,emphasis:v}))} rows={3}/></div>
+              <div><FL>Anything to avoid or de-emphasize? (optional)</FL><TA value={tailorInputs.avoid} onChange={(v)=>setTailorInputs(p=>({...p,avoid:v}))} rows={2}/></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><FL>Resume</FL><Sel value={tailorInputs.resumeId} onChange={(v)=>setTailorInputs(p=>({...p,resumeId:v}))} options={[{value:"",label:"Select resume"},...resumes.map(d=>({value:d.id,label:d.tag}))]}/></div>
+                <div><FL>Cover letter</FL><Sel value={tailorInputs.coverId} onChange={(v)=>setTailorInputs(p=>({...p,coverId:v}))} options={[{value:"",label:"Select cover letter"},...covers.map(d=>({value:d.id,label:d.tag}))]}/></div>
+              </div>
             </div>
-            <StatusBadge status={hasPremium ? "offer" : "saved"} />
-          </div>
-          <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:14}}>
-            Current status: <strong style={{color:T.text}}>{status}</strong>
-            {renewalDate ? <> · Renews on <strong style={{color:T.text}}>{renewalDate}</strong></> : null}
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {!hasPremium && (
-              <Btn onClick={onCheckout} disabled={loading}>
-                {loading ? <><Spinner color="#fff"/> Opening checkout…</> : "Upgrade to Pro"}
+
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
+              <Btn variant="ghost" onClick={()=>setTailorModalJobId(null)} disabled={tailorLoading}>Cancel</Btn>
+              <Btn onClick={generateTailoredApplication} disabled={tailorLoading || quota.remaining <= 0}>
+                {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Generate tailored application"}
               </Btn>
-            )}
-            {subscription?.stripe_customer_id && (
-              <Btn onClick={onPortal} variant="secondary" disabled={loading}>
-                {loading ? <><Spinner/> Opening portal…</> : "Manage Subscription"}
-              </Btn>
-            )}
-            <Btn onClick={onRefresh} variant="ghost" disabled={loading}>Refresh Status</Btn>
+            </div>
           </div>
-        </Card>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1405,25 +1180,20 @@ function BillingView({subscription,hasPremium,onCheckout,onPortal,onRefresh,load
 // ═══════════════════════════════════════════════════════════════════════════════
 function AppShell({
   docs,setDocs,jobs,setJobs,userName,onLogout,
-  subscription,hasPremium,onCheckout,onPortal,onRefreshBilling,billingLoading,
 }){
   const [active,setActive]=useState("profile");
   const nav=[
     {id:"profile",   icon:"👤", label:"Profile"},
-    {id:"suggested", icon:"🧭", label:"Suggested Roles"},
+    {id:"suggested", icon:"🧭", label:"Suggested Jobs", disabled:true},
     {id:"search",    icon:"🔍", label:"Job Search"},
     {id:"tracker",   icon:"📊", label:"Tracker"},
-    {id:"tailor",    icon:hasPremium?"✨":"🔒", label:"Tailor AI"},
   ];
-  if (BILLING_ENABLED) nav.push({id:"billing", icon:"💳", label:"Billing"});
 
   const views={
     profile:   <ProfileView   docs={docs} setDocs={setDocs} userName={userName}/>,
-    suggested: <SuggestedView docs={docs} jobs={jobs} setJobs={setJobs}/>,
-    search:    <SearchView    docs={docs} jobs={jobs} setJobs={setJobs}/>,
+    suggested: <SuggestedView />,
+    search:    <SearchView    jobs={jobs} setJobs={setJobs}/>,
     tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs}/>,
-    tailor:    <TailorView    docs={docs} jobs={jobs} setJobs={setJobs} hasPremium={hasPremium} onUpgrade={onCheckout} billingLoading={billingLoading}/>,
-    ...(BILLING_ENABLED ? { billing: <BillingView subscription={subscription} hasPremium={hasPremium} onCheckout={onCheckout} onPortal={onPortal} onRefresh={onRefreshBilling} loading={billingLoading}/> } : {}),
   };
 
   return(
@@ -1435,14 +1205,15 @@ function AppShell({
         </div>
         <nav style={{display:"flex",flexDirection:"column",gap:4,marginTop:6,flex:1}}>
           {nav.map(n=>(
-            <button key={n.id} onClick={()=>setActive(n.id)} style={{
+            <button key={n.id} onClick={()=>{ if(!n.disabled) setActive(n.id); }} style={{
               display:"flex",alignItems:"center",gap:10,padding:"10px 11px",borderRadius:10,border:"none",
-              cursor:"pointer",width:"100%",background:active===n.id?T.primaryLight:"transparent",
-              color:active===n.id?T.primary:T.textSub,fontFamily:"inherit",fontSize:13,
+              cursor:n.disabled?"not-allowed":"pointer",width:"100%",background:active===n.id?T.primaryLight:"transparent",
+              color:n.disabled?T.textMute:(active===n.id?T.primary:T.textSub),fontFamily:"inherit",fontSize:13,
               fontWeight:active===n.id?700:560,transition:"all 0.12s",textAlign:"left"
-            }}>
+            }} disabled={n.disabled}>
               <span style={{fontSize:15,flexShrink:0,width:22,height:22,display:"grid",placeItems:"center",background:active===n.id?"#FFFFFF":"transparent",borderRadius:7,border:active===n.id?`1px solid ${T.primaryMid}`:"1px solid transparent"}}>{n.icon}</span>
               <span style={{flex:1}}>{n.label}</span>
+              {n.disabled && <span style={{fontSize:10,fontWeight:700,color:T.textMute}}>Coming Soon</span>}
               {active===n.id&&<div style={{width:6,height:6,borderRadius:"50%",background:T.primary,flexShrink:0}}/>}
             </button>
           ))}
@@ -1474,56 +1245,16 @@ export default function App(){
   const [userName,setUserName]=useState("");
   const [docs,setDocs]=useState([]);
   const [jobs,setJobs]=useState([]);
-  const [subscription,setSubscription]=useState(null);
-  const [billingLoading,setBillingLoading]=useState(false);
 
   // Load data from Supabase after login
   async function loadData(){
     try{
-      const [d,j,s]=await Promise.all([
+      const [d,j]=await Promise.all([
         store.getDocs(),
         store.getJobs(),
-        BILLING_ENABLED ? store.getSubscription() : Promise.resolve(null),
       ]);
-      setDocs(d||[]); setJobs(j||[]); setSubscription(s||null);
+      setDocs(d||[]); setJobs(j||[]);
     }catch(e){console.error("Error loading data:",e);}
-  }
-
-  async function refreshBilling() {
-    if (!BILLING_ENABLED) return;
-    setBillingLoading(true);
-    try {
-      const s = await store.getSubscription();
-      setSubscription(s || null);
-    } catch (e) {
-      console.error("Error loading billing state:", e);
-    } finally {
-      setBillingLoading(false);
-    }
-  }
-
-  async function startCheckout() {
-    if (!BILLING_ENABLED) return;
-    setBillingLoading(true);
-    try {
-      const url = await billingApi.startCheckout();
-      window.location.assign(url);
-    } catch (e) {
-      alert(`Could not open checkout: ${e.message || e}`);
-      setBillingLoading(false);
-    }
-  }
-
-  async function openBillingPortal() {
-    if (!BILLING_ENABLED) return;
-    setBillingLoading(true);
-    try {
-      const url = await billingApi.openPortal();
-      window.location.assign(url);
-    } catch (e) {
-      alert(`Could not open billing portal: ${e.message || e}`);
-      setBillingLoading(false);
-    }
   }
 
   useEffect(() => {
@@ -1569,8 +1300,6 @@ export default function App(){
     } finally {
       setDocs([]);
       setJobs([]);
-      setSubscription(null);
-      setBillingLoading(false);
       setUserName("");
       setLoggedIn(false);
       setBootstrappingAuth(false);
@@ -1594,11 +1323,7 @@ export default function App(){
           @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
           *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
           body{font-family:'Outfit',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
-          input::placeholder{color:${LT.textMute};}
-          @keyframes float{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-30px) scale(1.05);}}
-          @keyframes slideInLeft{from{opacity:0;transform:translateX(-40px);}to{opacity:1;transform:translateX(0);}}
-          @keyframes slideInRight{from{opacity:0;transform:translateX(40px);}to{opacity:1;transform:translateX(0);}}
-          @keyframes spin{to{transform:rotate(360deg);}}
+          input::placeholder{color:#94A3B8;}
         `}</style>
         <LandingPage onLogin={async (name)=>{
           setUserName(name);
@@ -1631,12 +1356,6 @@ export default function App(){
       <AppShell docs={docs} setDocs={setDocs} jobs={jobs} setJobs={setJobs}
         userName={userName}
         onLogout={handleLogout}
-        subscription={subscription}
-        hasPremium={!BILLING_ENABLED || hasPremiumAccess(subscription)}
-        onCheckout={startCheckout}
-        onPortal={openBillingPortal}
-        onRefreshBilling={refreshBilling}
-        billingLoading={billingLoading}
       />
     </>
   );

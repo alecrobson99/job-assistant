@@ -34,7 +34,8 @@ npm run build
 
 1. In Supabase, open `SQL Editor`.
 2. Copy and run the SQL in `supabase/schema.sql`.
-3. In Supabase Auth settings for development, you can disable email confirmation.
+3. Copy and run `supabase/tailoring_limits.sql` (enforces 7 tailoring generations per user/week).
+4. In Supabase Auth settings for development, you can disable email confirmation.
 
 ## AI Setup (Anthropic via Supabase Proxy)
 
@@ -51,6 +52,14 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 ```bash
 supabase functions deploy anthropic-proxy
 ```
+
+## Job Search API
+
+- Set `VITE_JOB_SEARCH_API_URL` if you want real job board search results.
+- Expected API behavior: accepts `?q=keyword` and returns array/object containing job records.
+- Jobs are normalized in-app to:
+  `title`, `company`, `location`, `description`, `apply_url`, `source`.
+- If `VITE_JOB_SEARCH_API_URL` is not set, the app uses local placeholder results.
 
 ## Stripe Subscription Setup
 
