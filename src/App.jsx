@@ -179,17 +179,20 @@ async function searchJobsByKeyword(query) {
 
 function LandingPage({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
+  const [signupStep, setSignupStep] = useState("credentials");
+  const [selectedPlan, setSelectedPlan] = useState("monthly");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-  
+
     try {
       const supabase = getSupabaseClient();
 
@@ -198,12 +201,10 @@ function LandingPage({ onLogin }) {
           email,
           password,
         });
-  
         if (error) throw error;
-  
+
         onLogin(
-          data.user.user_metadata?.full_name ||
-          email.split("@")[0],
+          data.user.user_metadata?.full_name || email.split("@")[0],
           data.user.id
         );
       } else {
@@ -217,23 +218,16 @@ function LandingPage({ onLogin }) {
             },
           },
         });
-  
         if (error) throw error;
 
-        // Some Supabase projects require email confirmation and won't return a session on sign-up.
         if (!data?.session || !data?.user) {
           setIsLogin(true);
           setError("Account created. Confirm your email, then sign in.");
           return;
         }
 
-        onLogin(
-          data.user.user_metadata?.full_name ||
-          data.user.user_metadata?.name ||
-          name ||
-          email.split("@")[0],
-          data.user.id
-        );
+        setSignupStep("plan");
+        setNotice("Account created. Step 2 of 3: choose your plan.");
       }
     } catch (err) {
       if (err?.message?.includes("Database error saving new user")) {
@@ -245,6 +239,25 @@ function LandingPage({ onLogin }) {
       setLoading(false);
     }
   };
+
+  const startCheckout = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+        body: { plan: selectedPlan },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (!data?.url) throw new Error("Missing Stripe checkout URL.");
+      window.location.assign(data.url);
+    } catch (err) {
+      setLoading(false);
+      setError(err?.message || "Could not start checkout.");
+    }
+  };
+
   const inputStyle = {
     width: "100%",
     background: "#FFFFFF",
@@ -258,26 +271,36 @@ function LandingPage({ onLogin }) {
     fontFamily: "inherit",
     boxSizing: "border-box",
   };
-  
+
   return (
     <div style={{ minHeight:"100vh", background:"#F5F7FB", padding:"32px 20px" }}>
       <main style={{ maxWidth:980, margin:"0 auto", display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:24 }}>
         <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:28 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#5C6B8A", marginBottom:12 }}>EARLY TOOL · MVP</div>
+          <div style={{ fontSize:12, fontWeight:700, color:"#5C6B8A", marginBottom:12 }}>SUBSCRIPTION APP · STRIPE SECURED</div>
           <h1 style={{ fontSize:34, lineHeight:1.2, margin:"0 0 10px", color:"#0F172A" }}>
-            Track jobs and tailor applications faster.
+            Sign up now and streamline your job search.
           </h1>
           <p style={{ fontSize:15, lineHeight:1.6, color:"#475569", margin:"0 0 16px" }}>
-            Built for active job seekers who want a simple tracker plus practical AI tailoring in one place.
+            Create an account, pick a plan, and unlock your full application tracking and tailoring workspace.
           </p>
           <ul style={{ margin:"0 0 18px 18px", color:"#334155", lineHeight:1.8, fontSize:14 }}>
-            <li>Save jobs from one search flow and keep statuses updated.</li>
-            <li>Generate tailored application content from your own documents.</li>
-            <li>Weekly limits keep usage predictable while we improve reliability.</li>
+            <li>Save jobs and track status in one place.</li>
+            <li>Generate tailored resumes and cover letters from your source docs.</li>
+            <li>Manage subscription billing securely through Stripe.</li>
           </ul>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
+            {["1. Sign up", "2. Choose plan", "3. Pay securely"].map((label) => (
+              <span key={label} style={{ fontSize:11, fontWeight:700, color:"#334155", background:"#F8FAFF", border:"1px solid #DDE3EE", borderRadius:999, padding:"5px 9px" }}>
+                {label}
+              </span>
+            ))}
+          </div>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            <button onClick={()=>setIsLogin(true)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
-              Start tracking jobs
+            <button onClick={() => { setIsLogin(false); setSignupStep("credentials"); setError(""); setNotice(""); }} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
+              Sign up now
+            </button>
+            <button onClick={() => { setIsLogin(true); setSignupStep("credentials"); setError(""); setNotice(""); }} style={{ background:"#fff", color:"#334155", border:"1px solid #D0D7E2", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
+              Sign in
             </button>
             <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid #D0D7E2", borderRadius:8, color:"#334155", textDecoration:"none", fontWeight:600 }}>
               Send feedback
@@ -287,53 +310,87 @@ function LandingPage({ onLogin }) {
 
         <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:24 }}>
           <h2 style={{ fontSize:20, margin:"0 0 6px", color:"#0F172A" }}>
-            {isLogin ? "Sign in" : "Create account"}
+            {isLogin ? "Sign in" : (signupStep === "credentials" ? "Create account" : "Choose plan")}
           </h2>
+          {!isLogin && (
+            <div style={{display:"flex",gap:6,margin:"0 0 10px"}}>
+              {["Sign up", "Plan", "Payment"].map((label, idx) => {
+                const active = signupStep === "plan" ? idx <= 2 : idx === 0;
+                return (
+                  <span key={label} style={{fontSize:11,fontWeight:700,padding:"4px 8px",borderRadius:999,border:`1px solid ${active ? "#C7D8FA" : "#D0D7E2"}`,background:active ? "#EEF3FD" : "#fff",color:active ? "#2457D6" : "#64748B"}}>
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <p style={{ fontSize:13, color:"#64748B", margin:"0 0 16px" }}>
-            {isLogin ? "Continue where you left off." : "Create an account to start tracking."}
+            {isLogin
+              ? "Continue where you left off."
+              : signupStep === "credentials"
+                ? "Step 1 of 3: Create your account."
+                : "Step 2 of 3: Select plan, then continue to secure payment."}
           </p>
 
           {error && (
-            <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
-              padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }}>
+            <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8, padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }}>
               {error}
             </div>
           )}
+          {notice && !error && (
+            <div style={{ background:"#ECFDF3", border:"1px solid #BBF7D0", borderRadius:8, padding:"10px 12px", marginBottom:14, fontSize:13, color:"#166534" }}>
+              {notice}
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit}>
-            {!isLogin && (
+          {(isLogin || signupStep === "credentials") ? (
+            <form onSubmit={handleSubmit}>
+              {!isLogin && (
+                <div style={{ marginBottom:12 }}>
+                  <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
+                  <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="Jane Smith" required style={inputStyle}/>
+                </div>
+              )}
+
               <div style={{ marginBottom:12 }}>
-                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
-                <input type="text" value={name} onChange={e=>setName(e.target.value)}
-                  placeholder="Jane Smith" required style={inputStyle}/>
+                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required style={inputStyle}/>
               </div>
-            )}
 
-            <div style={{ marginBottom:12 }}>
-              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                placeholder="you@example.com" required style={inputStyle}/>
+              <div style={{ marginBottom:16 }}>
+                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
+                <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters" required minLength={6} style={inputStyle}/>
+              </div>
+
+              <button type="submit" disabled={loading} style={{ width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit" }}>
+                {loading ? "Please wait..." : (isLogin ? "Sign in" : "Continue to plans")}
+              </button>
+            </form>
+          ) : (
+            <div>
+              <div style={{display:"grid",gap:8,marginBottom:14}}>
+                {[
+                  { value: "monthly", label: "Monthly", sub: "Billed every month" },
+                  { value: "yearly", label: "Yearly", sub: "Billed annually" },
+                ].map((plan) => (
+                  <button key={plan.value} onClick={() => setSelectedPlan(plan.value)} style={{ border:`1px solid ${selectedPlan===plan.value?"#9DB6FA":"#D0D7E2"}`, background:selectedPlan===plan.value?"#EEF3FD":"#fff", color:"#1E293B", borderRadius:10, padding:"10px 12px", textAlign:"left", cursor:"pointer" }}>
+                    <div style={{fontSize:14,fontWeight:700}}>{plan.label}</div>
+                    <div style={{fontSize:12,color:"#64748B"}}>{plan.sub}</div>
+                  </button>
+                ))}
+              </div>
+              <button onClick={startCheckout} disabled={loading} style={{ width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit" }}>
+                {loading ? "Redirecting..." : "Step 3 of 3: Continue to secure payment"}
+              </button>
+              <div style={{fontSize:12,color:"#64748B",marginTop:8,lineHeight:1.5}}>
+                You will be redirected to Stripe Checkout.
+              </div>
             </div>
-
-            <div style={{ marginBottom:16 }}>
-              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
-                placeholder="At least 6 characters" required minLength={6} style={inputStyle}/>
-            </div>
-
-            <button type="submit" disabled={loading} style={{
-              width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8,
-              padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
-            }}>
-              {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
-            </button>
-          </form>
+          )}
 
           <div style={{ marginTop:12, fontSize:12, color:"#64748B" }}>
             {isLogin ? "No account yet? " : "Already have an account? "}
-            <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
-              background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
-            }}>
+            <button onClick={() => { setIsLogin(!isLogin); setSignupStep("credentials"); setError(""); setNotice(""); }} style={{ background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0 }}>
               {isLogin ? "Create one" : "Sign in"}
             </button>
           </div>
