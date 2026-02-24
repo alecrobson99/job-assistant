@@ -484,6 +484,21 @@ const isMissingRpcError = (error) => {
   );
 };
 const needsOnboarding = (profile) => !((profile?.location || "").trim() && (profile?.targetTitle || "").trim());
+const isPaidSubscription = (sub) => {
+  if (!sub) return false;
+  const paid = sub.status === "active" || sub.status === "trialing";
+  if (!paid) return false;
+  if (!sub.current_period_end) return true;
+  const end = new Date(sub.current_period_end).getTime();
+  return Number.isFinite(end) && end > Date.now();
+};
+const formatBillingStatus = (status) => {
+  if (!status) return "Inactive";
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
 
 async function getAuthContext() {
   const supabase = getSupabaseClient();
@@ -656,6 +671,26 @@ const store = {
     if (error?.code === "42P01" || (error?.message || "").includes("billing_subscriptions")) return null;
     if (error) throw error;
     return data;
+  },
+
+  createCheckoutSession: async (priceId) => {
+    const { supabase } = await getAuthContext();
+    const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+      body: priceId ? { priceId } : {},
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    if (!data?.url) throw new Error("Missing checkout URL");
+    return data.url;
+  },
+
+  createPortalSession: async () => {
+    const { supabase } = await getAuthContext();
+    const { data, error } = await supabase.functions.invoke("create-portal-session");
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    if (!data?.url) throw new Error("Missing portal URL");
+    return data.url;
   },
 
   getTailoringQuota: async () => {
@@ -992,6 +1027,30 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
   const [docTag,setDocTag]=useState("");
   const [docContent,setDocContent]=useState("");
   const [editDocId,setEditDocId]=useState(null);
+  const [subscription,setSubscription]=useState(null);
+  const [billingLoading,setBillingLoading]=useState(true);
+  const [billingBusy,setBillingBusy]=useState(false);
+  const [billingError,setBillingError]=useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadBilling() {
+      setBillingLoading(true);
+      setBillingError("");
+      try {
+        const sub = await store.getSubscription();
+        if (mounted) setSubscription(sub);
+      } catch (e) {
+        if (mounted) setBillingError(`Billing load failed: ${e.message}`);
+      } finally {
+        if (mounted) setBillingLoading(false);
+      }
+    }
+    loadBilling();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   function up(k,v){setProfileState((p)=>({...p,[k]:v}));}
   async function save(){
@@ -1054,6 +1113,31 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
     </div>
   );
   const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
+  const paid = isPaidSubscription(subscription);
+
+  async function startCheckout() {
+    setBillingBusy(true);
+    setBillingError("");
+    try {
+      const url = await store.createCheckoutSession();
+      window.location.assign(url);
+    } catch (e) {
+      setBillingError(`Checkout failed: ${e.message}`);
+      setBillingBusy(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    setBillingBusy(true);
+    setBillingError("");
+    try {
+      const url = await store.createPortalSession();
+      window.location.assign(url);
+    } catch (e) {
+      setBillingError(`Billing portal failed: ${e.message}`);
+      setBillingBusy(false);
+    }
+  }
 
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
@@ -1127,6 +1211,43 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
             {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save All Preferences"}
           </Btn>
         </div>
+
+        <Card style={{marginBottom:18}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+            <SH icon="💳" title="Billing"/>
+            {!billingLoading && (
+              <Chip
+                label={paid ? "Pro Active" : formatBillingStatus(subscription?.status)}
+                color={paid ? T.green : T.textSub}
+              />
+            )}
+          </div>
+
+          <div style={{fontSize:13,color:T.textSub,lineHeight:1.6,marginBottom:12}}>
+            {billingLoading
+              ? "Loading billing status..."
+              : paid
+                ? `Your subscription is active${subscription?.current_period_end ? ` until ${new Date(subscription.current_period_end).toLocaleDateString()}` : ""}.`
+                : "You are on the free plan."}
+          </div>
+
+          {billingError && (
+            <div style={{fontSize:12,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"8px 12px",marginBottom:12}}>
+              {billingError}
+            </div>
+          )}
+
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {!paid && (
+              <Btn onClick={startCheckout} disabled={billingLoading || billingBusy}>
+                {billingBusy ? <><Spinner color="#fff"/> Redirecting…</> : "Upgrade to Pro"}
+              </Btn>
+            )}
+            <Btn variant="ghost" onClick={openBillingPortal} disabled={billingLoading || billingBusy}>
+              {billingBusy ? <><Spinner/> Redirecting…</> : "Manage Billing"}
+            </Btn>
+          </div>
+        </Card>
 
         <Card>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
