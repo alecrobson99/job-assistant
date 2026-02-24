@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from "react";
+import { Document as DocxDocument, Packer as DocxPacker, Paragraph as DocxParagraph, TextRun as DocxTextRun } from "docx";
+import { jsPDF } from "jspdf";
 import { getSupabaseClient } from "./supabase";
 
 
@@ -29,6 +31,11 @@ const STATUS_META = {
 const STATUS_OPTIONS = ["saved","tailored","applied","interview","offer","rejected"];
 const FEEDBACK_EMAIL = "feedback@jobassistant.app";
 const WEEKLY_TAILOR_LIMIT = 7;
+const TAILORED_FILE_FORMATS = [
+  { value: "txt", label: ".txt" },
+  { value: "docx", label: ".docx" },
+  { value: "pdf", label: ".pdf" },
+];
 const LOCATION_OPTIONS = [
   "Remote",
   "Hybrid",
@@ -365,6 +372,96 @@ const formatDate = (value) => {
   return iso ? iso.slice(0, 10) : "—";
 };
 
+const sanitizeFilePart = (value) =>
+  (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "document";
+
+const triggerBlobDownload = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const buildTailoredDocuments = (job, payload, selectedFormats) => {
+  const createdAt = new Date().toISOString();
+  const titlePart = sanitizeFilePart(job.title);
+  const companyPart = sanitizeFilePart(job.company);
+  const docs = [];
+
+  const sources = [
+    { type: "resume", label: "Resume", content: payload.tailored_resume_summary || "" },
+    { type: "cover_letter", label: "Cover Letter", content: payload.tailored_cover_letter || "" },
+  ];
+
+  sources.forEach((source) => {
+    const content = source.content.trim();
+    if (!content) return;
+    selectedFormats.forEach((format) => {
+      docs.push({
+        id: crypto.randomUUID(),
+        type: source.type,
+        format,
+        fileName: `${titlePart}-${companyPart}-${source.type}.${format}`,
+        content,
+        createdAt,
+      });
+    });
+  });
+
+  return docs;
+};
+
+const downloadTailoredDocument = async (doc) => {
+  if (!doc?.content || !doc?.fileName) return;
+  const text = doc.content;
+
+  if (doc.format === "txt") {
+    triggerBlobDownload(new Blob([text], { type: "text/plain;charset=utf-8" }), doc.fileName);
+    return;
+  }
+
+  if (doc.format === "docx") {
+    const document = new DocxDocument({
+      sections: [
+        {
+          children: text.split(/\n+/).map((line) => new DocxParagraph({
+            children: [new DocxTextRun(line)],
+          })),
+        },
+      ],
+    });
+    const blob = await DocxPacker.toBlob(document);
+    triggerBlobDownload(blob, doc.fileName);
+    return;
+  }
+
+  if (doc.format === "pdf") {
+    const pdf = new jsPDF({ unit: "pt", format: "letter" });
+    const margin = 48;
+    const maxWidth = pdf.internal.pageSize.getWidth() - margin * 2;
+    const lines = pdf.splitTextToSize(text, maxWidth);
+    const lineHeight = 16;
+    let y = margin;
+
+    lines.forEach((line) => {
+      if (y > pdf.internal.pageSize.getHeight() - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.text(line, margin, y);
+      y += lineHeight;
+    });
+
+    triggerBlobDownload(pdf.output("blob"), doc.fileName);
+  }
+};
+
 const normalizeDoc = (doc) => ({
   ...doc,
   createdAt: doc.createdAt || doc.created_at || null,
@@ -374,6 +471,7 @@ const normalizeJob = (job) => ({
   ...job,
   savedAt: job.savedAt || job.saved_at || job.created_at || null,
   keywords: Array.isArray(job.keywords) ? job.keywords : [],
+  tailoredDocuments: Array.isArray(job.tailoredDocuments) ? job.tailoredDocuments : [],
 });
 const isMissingRpcError = (error) => {
   const msg = (error?.message || "").toLowerCase();
@@ -1174,6 +1272,7 @@ function SearchView({jobs,setJobs,profile}){
         url: job.apply_url,
         status:"saved",
         notes:"",
+        tailoredDocuments: [],
       });
       setJobs(prev=>[saved,...prev]);
     }catch(e){setError(`Error saving job: ${e.message}`);}
@@ -1296,6 +1395,11 @@ function TrackerView({jobs,setJobs,docs}){
     resumeId: "",
     coverId: "",
   });
+  const [tailorFormats,setTailorFormats]=useState({
+    txt: true,
+    docx: true,
+    pdf: false,
+  });
   const [tailorLoading,setTailorLoading]=useState(false);
   const [quota,setQuota]=useState({ weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null });
 
@@ -1370,6 +1474,10 @@ function TrackerView({jobs,setJobs,docs}){
     setTrackerErr("");
   }
 
+  function toggleTailorFormat(format) {
+    setTailorFormats((prev) => ({ ...prev, [format]: !prev[format] }));
+  }
+
   async function generateTailoredApplication() {
     if (!selectedTailorJob) return;
     const resume = docs.find((d) => d.id === tailorInputs.resumeId);
@@ -1384,6 +1492,13 @@ function TrackerView({jobs,setJobs,docs}){
     }
     if (quota.remaining <= 0) {
       setTrackerErr("Weekly tailoring limit reached. Please wait for reset.");
+      return;
+    }
+    const selectedFormats = TAILORED_FILE_FORMATS
+      .map((f) => f.value)
+      .filter((format) => tailorFormats[format]);
+    if (selectedFormats.length === 0) {
+      setTrackerErr("Select at least one tailored document format.");
       return;
     }
 
@@ -1410,6 +1525,7 @@ function TrackerView({jobs,setJobs,docs}){
         matchScore: Number.isFinite(data.match_score) ? data.match_score : null,
         resumeDocId: resume?.id || null,
         coverDocId: cover?.id || null,
+        tailoredDocuments: buildTailoredDocuments(selectedTailorJob, data, selectedFormats),
         status: "tailored",
       };
       const dbRow = await store.updateJob(selectedTailorJob.id, updates);
@@ -1484,6 +1600,7 @@ function TrackerView({jobs,setJobs,docs}){
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
             {filtered.map((job)=>{
               const m=STATUS_META[job.status]||STATUS_META.saved;
+              const tailoredDocs = Array.isArray(job.tailoredDocuments) ? job.tailoredDocuments : [];
               return(
                 <Card key={job.id}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
@@ -1510,6 +1627,31 @@ function TrackerView({jobs,setJobs,docs}){
                     <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6}}>
                       {job.tailoredResume||<em>Not tailored yet.</em>}
                     </div>
+                  </div>
+
+                  <div style={{marginBottom:10}}>
+                    <FL>Tailored Documents</FL>
+                    {tailoredDocs.length === 0 ? (
+                      <div style={{fontSize:12,color:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`}}>
+                        No tailored documents attached yet.
+                      </div>
+                    ) : (
+                      <div style={{display:"grid",gap:6}}>
+                        {tailoredDocs.map((doc) => (
+                          <div key={doc.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:T.bg,borderRadius:8,padding:"8px 10px",border:`1px solid ${T.border}`}}>
+                            <div>
+                              <div style={{fontSize:12,fontWeight:700,color:T.text}}>{doc.fileName}</div>
+                              <div style={{fontSize:11,color:T.textMute}}>
+                                {(doc.type || "document").replace("_", " ")} · {formatDate(doc.createdAt)}
+                              </div>
+                            </div>
+                            <Btn small variant="ghost" onClick={() => { downloadTailoredDocument(doc).catch(() => setTrackerErr("Could not generate download file.")); }}>
+                              Download
+                            </Btn>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
@@ -1550,6 +1692,30 @@ function TrackerView({jobs,setJobs,docs}){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div><FL>Resume</FL><Sel value={tailorInputs.resumeId} onChange={(v)=>setTailorInputs(p=>({...p,resumeId:v}))} options={[{value:"",label:"Select resume"},...resumes.map(d=>({value:d.id,label:d.tag}))]}/></div>
                 <div><FL>Cover letter</FL><Sel value={tailorInputs.coverId} onChange={(v)=>setTailorInputs(p=>({...p,coverId:v}))} options={[{value:"",label:"Select cover letter"},...covers.map(d=>({value:d.id,label:d.tag}))]}/></div>
+              </div>
+              <div>
+                <FL>Tailored document formats</FL>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {TAILORED_FILE_FORMATS.map((f) => (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => toggleTailorFormat(f.value)}
+                      style={{
+                        border:`1px solid ${tailorFormats[f.value] ? T.primaryMid : T.border}`,
+                        background:tailorFormats[f.value] ? T.primaryLight : "#fff",
+                        color:tailorFormats[f.value] ? T.primary : T.textSub,
+                        borderRadius:999,
+                        padding:"6px 10px",
+                        fontSize:12,
+                        fontWeight:700,
+                        cursor:"pointer",
+                      }}
+                    >
+                      {tailorFormats[f.value] ? "✓ " : ""}{f.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

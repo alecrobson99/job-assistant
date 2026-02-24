@@ -88,6 +88,7 @@ create table if not exists public.saved_jobs (
   updated_at timestamptz not null default now(),
   "tailoredResume" text,
   "tailoredCover" text,
+  "tailoredDocuments" jsonb not null default '[]'::jsonb,
   keywords text[] not null default '{}',
   "matchScore" integer check ("matchScore" between 0 and 100),
   "resumeDocId" uuid references public.documents(id) on delete set null,
