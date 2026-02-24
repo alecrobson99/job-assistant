@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 type CheckoutPayload = {
+  plan?: "monthly" | "yearly";
   priceId?: string;
 };
 
@@ -19,6 +20,8 @@ serve(async (req) => {
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
     const appUrl = Deno.env.get("APP_URL");
     const defaultPriceId = Deno.env.get("STRIPE_PRICE_ID");
+    const monthlyPriceId = Deno.env.get("STRIPE_PRICE_MONTHLY");
+    const yearlyPriceId = Deno.env.get("STRIPE_PRICE_YEARLY");
 
     if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey || !stripeSecretKey || !appUrl) {
       throw new Error("Missing required environment variables");
@@ -82,7 +85,10 @@ serve(async (req) => {
     }
 
     const body = (await req.json().catch(() => ({}))) as CheckoutPayload;
-    const priceId = body.priceId || defaultPriceId;
+    let priceId = body.priceId || defaultPriceId;
+
+    if (body.plan === "monthly") priceId = monthlyPriceId || priceId;
+    if (body.plan === "yearly") priceId = yearlyPriceId || priceId;
 
     if (!priceId) {
       throw new Error("Missing Stripe price id");
