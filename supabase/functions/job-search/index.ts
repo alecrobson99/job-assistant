@@ -30,25 +30,54 @@ serve(async (req) => {
       });
     }
 
-    const url = new URL("https://jsearch.p.rapidapi.com/search");
-    url.searchParams.set("query", query);
-    url.searchParams.set("page", String(body.page || 1));
-    url.searchParams.set("num_pages", String(body.numPages || 1));
-    url.searchParams.set("country", body.country || "us");
-    url.searchParams.set("date_posted", body.datePosted || "all");
+    const countries = (body.country || "us")
+      .split(",")
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
 
-    const apiRes = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "x-rapidapi-host": "jsearch.p.rapidapi.com",
-        "x-rapidapi-key": rapidApiKey,
-      },
-    });
+    const responses = await Promise.all(
+      countries.map(async (country) => {
+        const url = new URL("https://jsearch.p.rapidapi.com/search");
+        url.searchParams.set("query", query);
+        url.searchParams.set("page", String(body.page || 1));
+        url.searchParams.set("num_pages", String(body.numPages || 1));
+        url.searchParams.set("country", country);
+        url.searchParams.set("date_posted", body.datePosted || "all");
 
-    const responseText = await apiRes.text();
+        const apiRes = await fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            "x-rapidapi-host": "jsearch.p.rapidapi.com",
+            "x-rapidapi-key": rapidApiKey,
+          },
+        });
 
-    return new Response(responseText, {
-      status: apiRes.status,
+        const text = await apiRes.text();
+        return { ok: apiRes.ok, status: apiRes.status, text };
+      })
+    );
+
+    const firstError = responses.find((r) => !r.ok);
+    if (firstError) {
+      return new Response(firstError.text, {
+        status: firstError.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const merged = responses
+      .flatMap((r) => {
+        const parsed = JSON.parse(r.text);
+        const arr = Array.isArray(parsed?.data) ? parsed.data : [];
+        return arr;
+      });
+
+    const deduped = Array.from(new Map(
+      merged.map((j) => [`${j.job_id || ""}|${j.job_title || ""}|${j.employer_name || ""}|${j.job_city || ""}`, j])
+    ).values());
+
+    return new Response(JSON.stringify({ data: deduped }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

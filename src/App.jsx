@@ -1550,31 +1550,11 @@ function TrackerView({jobs,setJobs,docs}){
                     </div>
                   </div>
 
-                  {(job.tailoredResume || job.tailoredCover) && (
-                    <div style={{marginBottom:10}}>
-                      <FL>Attachments</FL>
-                      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
-                        <Sel
-                          value={downloadFormatByJob[job.id] || "txt"}
-                          onChange={(v)=>setDownloadFormat(job.id, v)}
-                          options={[
-                            { value:"txt", label:".txt" },
-                            { value:"pdf", label:".pdf" },
-                            { value:"docx", label:".docx" },
-                          ]}
-                          style={{width:120,padding:"5px 10px",fontSize:12}}
-                        />
-                        {job.tailoredResume && <Btn small variant="ghost" onClick={()=>downloadArtifact(job, "resume")}>Download Resume</Btn>}
-                        {job.tailoredCover && <Btn small variant="ghost" onClick={()=>downloadArtifact(job, "cover")}>Download Cover</Btn>}
-                      </div>
-                    </div>
-                  )}
-
                   {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
 
                   <div style={{display:"flex",gap:8}}>
                     <Btn onClick={()=>openTailorModal(job)} disabled={quota.remaining <= 0} variant="secondary" small>
-                      Tailor AI
+                      Tailor Application
                     </Btn>
                     <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
                   </div>
@@ -1614,7 +1594,7 @@ function TrackerView({jobs,setJobs,docs}){
             <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
               <Btn variant="ghost" onClick={()=>setTailorModalJobId(null)} disabled={tailorLoading}>Cancel</Btn>
               <Btn onClick={generateTailoredApplication} disabled={tailorLoading || quota.remaining <= 0}>
-                {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Tailor + Approve"}
+                {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Generate tailored application"}
               </Btn>
             </div>
           </div>
