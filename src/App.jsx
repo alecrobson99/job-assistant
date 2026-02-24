@@ -55,6 +55,47 @@ const TITLE_OPTIONS = [
   "Sales Manager",
   "Marketing Manager",
 ];
+const LOCATION_CATALOG = [
+  { country: "United States", city: "New York", region: "NY" },
+  { country: "United States", city: "San Francisco", region: "CA" },
+  { country: "United States", city: "Los Angeles", region: "CA" },
+  { country: "United States", city: "San Diego", region: "CA" },
+  { country: "United States", city: "Seattle", region: "WA" },
+  { country: "United States", city: "Austin", region: "TX" },
+  { country: "United States", city: "Dallas", region: "TX" },
+  { country: "United States", city: "Chicago", region: "IL" },
+  { country: "United States", city: "Boston", region: "MA" },
+  { country: "United States", city: "Atlanta", region: "GA" },
+  { country: "United States", city: "Miami", region: "FL" },
+  { country: "United States", city: "Denver", region: "CO" },
+  { country: "United States", city: "Washington", region: "DC" },
+  { country: "Canada", city: "Toronto", region: "ON" },
+  { country: "Canada", city: "Vancouver", region: "BC" },
+  { country: "Canada", city: "Montreal", region: "QC" },
+  { country: "Canada", city: "Calgary", region: "AB" },
+  { country: "United Kingdom", city: "London", region: "" },
+  { country: "Germany", city: "Berlin", region: "" },
+  { country: "France", city: "Paris", region: "" },
+  { country: "Netherlands", city: "Amsterdam", region: "" },
+  { country: "Ireland", city: "Dublin", region: "" },
+  { country: "Australia", city: "Sydney", region: "" },
+  { country: "Australia", city: "Melbourne", region: "" },
+  { country: "India", city: "Bengaluru", region: "" },
+  { country: "India", city: "Hyderabad", region: "" },
+  { country: "India", city: "Mumbai", region: "" },
+  { country: "Singapore", city: "Singapore", region: "" },
+  { country: "United Arab Emirates", city: "Dubai", region: "" },
+];
+const OCCUPATION_OPTIONS = Array.from(new Set([
+  ...TITLE_OPTIONS,
+  "Customer Success Specialist",
+  "Operations Manager",
+  "HR Specialist",
+  "Graphic Designer",
+  "UX/UI Designer",
+  "Business Analyst",
+  "Recruiter",
+]));
 
 async function searchJobsByKeyword(query) {
   const supabase = getSupabaseClient();
@@ -138,7 +179,8 @@ function LandingPage({ onLogin }) {
   
         onLogin(
           data.user.user_metadata?.full_name ||
-          email.split("@")[0]
+          email.split("@")[0],
+          data.user.id
         );
       } else {
         const { data, error } = await supabase.auth.signUp({
@@ -165,7 +207,8 @@ function LandingPage({ onLogin }) {
           data.user.user_metadata?.full_name ||
           data.user.user_metadata?.name ||
           name ||
-          email.split("@")[0]
+          email.split("@")[0],
+          data.user.id
         );
       }
     } catch (err) {
@@ -315,6 +358,17 @@ const normalizeJob = (job) => ({
   savedAt: job.savedAt || job.saved_at || job.created_at || null,
   keywords: Array.isArray(job.keywords) ? job.keywords : [],
 });
+const isMissingRpcError = (error) => {
+  const msg = (error?.message || "").toLowerCase();
+  return (
+    error?.code === "42883" ||
+    error?.code === "PGRST202" ||
+    error?.status === 404 ||
+    msg.includes("could not find the function") ||
+    msg.includes("schema cache")
+  );
+};
+const needsOnboarding = (profile) => !((profile?.location || "").trim() && (profile?.targetTitle || "").trim());
 
 async function getAuthContext() {
   const supabase = getSupabaseClient();
@@ -492,7 +546,7 @@ const store = {
   getTailoringQuota: async () => {
     const { supabase } = await getAuthContext();
     const { data, error } = await supabase.rpc("get_tailoring_quota");
-    if (error?.code === "42883") {
+    if (isMissingRpcError(error)) {
       return { weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null, misconfigured: true };
     }
     if (error) throw error;
@@ -503,6 +557,9 @@ const store = {
   consumeTailoringUse: async (jobId) => {
     const { supabase } = await getAuthContext();
     const { data, error } = await supabase.rpc("consume_tailoring_use", { p_job_id: jobId || null });
+    if (isMissingRpcError(error)) {
+      return { weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null, misconfigured: true };
+    }
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     return row;
@@ -570,6 +627,197 @@ function Sel({value,onChange,options,style:s}){
     style={{width:"100%",background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:10,color:value?T.text:T.textMute,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",cursor:"pointer",...s}}>
     {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
   </select>;
+}
+
+function LocationAutocomplete({ value, onChange, placeholder = "City, state, or country", compact = false }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const input = value || "";
+  const q = input.trim().toLowerCase();
+
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const matches = useMemo(() => {
+    const base = [
+      { label: "Remote", value: "Remote" },
+      { label: "Hybrid", value: "Hybrid" },
+      { label: "On-site", value: "On-site" },
+      ...LOCATION_CATALOG.map((loc) => {
+        const region = loc.region ? `, ${loc.region}` : "";
+        return {
+          label: `${loc.city}${region}, ${loc.country}`,
+          value: `${loc.city}${region}, ${loc.country}`,
+        };
+      }),
+    ];
+    const unique = Array.from(new Map(base.map((x) => [x.value, x])).values());
+    if (!q) return unique.slice(0, 8);
+    return unique.filter((x) => x.label.toLowerCase().includes(q)).slice(0, 10);
+  }, [q]);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
+      <AppInput
+        value={input}
+        onChange={(v) => { onChange(v); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          if (input.trim()) onChange(input.trim());
+          setTimeout(() => setOpen(false), 80);
+        }}
+        placeholder={placeholder}
+        style={compact ? { height: 40, padding: "9px 12px" } : undefined}
+      />
+      {open && (
+        <div style={{
+          position: "absolute",
+          top: compact ? 42 : 46,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          background: "#fff",
+          border: `1px solid ${T.border}`,
+          borderRadius: 10,
+          boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
+          maxHeight: 220,
+          overflowY: "auto",
+        }}>
+          {matches.length === 0 ? (
+            <div style={{ padding: "10px 12px", fontSize: 12, color: T.textMute }}>
+              No matches. Press Enter to keep custom location.
+            </div>
+          ) : matches.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(m.value); setOpen(false); }}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                background: m.value === value ? T.primaryLight : "#fff",
+                color: T.text,
+                padding: "10px 12px",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {!open && value && (
+        <div style={{ marginTop: 6, fontSize: 11, color: T.textMute }}>
+          Selected: {value}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OnboardingFlow({ profile, onSave, onSkip }) {
+  const [step, setStep] = useState(0);
+  const [location, setLocation] = useState(profile.location || "");
+  const [occupationQuery, setOccupationQuery] = useState(profile.targetTitle || "");
+  const [occupation, setOccupation] = useState(profile.targetTitle || "");
+  const [distance, setDistance] = useState(profile.searchRadiusKm || "50");
+  const [saving, setSaving] = useState(false);
+  const occMatches = useMemo(() => {
+    const q = occupationQuery.trim().toLowerCase();
+    if (!q) return OCCUPATION_OPTIONS.slice(0, 8);
+    return OCCUPATION_OPTIONS.filter((o) => o.toLowerCase().includes(q)).slice(0, 10);
+  }, [occupationQuery]);
+
+  async function complete() {
+    setSaving(true);
+    await onSave({
+      location,
+      targetLocation: location,
+      targetTitle: occupation || occupationQuery,
+      searchRadiusKm: distance,
+      onboardingCompletedAt: new Date().toISOString(),
+    });
+    setSaving(false);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#EEEDF8", padding: "26px 18px" }}>
+      <div style={{ maxWidth: 540, margin: "0 auto", background: "#fff", border: `1px solid ${T.border}`, borderRadius: 18, boxShadow: "0 18px 34px rgba(15,23,42,0.08)", overflow: "hidden" }}>
+        <div style={{ padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: T.text }}>Quick Setup</div>
+            <div style={{ fontSize: 12, color: T.textSub }}>{step + 1}/3</div>
+          </div>
+          <div style={{ height: 4, background: "#EEF2FF", borderRadius: 99, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${((step + 1) / 3) * 100}%`, background: T.primary }} />
+          </div>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          {step === 0 && (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 750, color: T.text, marginBottom: 6 }}>Your location</div>
+              <div style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>Pick where you want to work. Type to search like Maps.</div>
+              <LocationAutocomplete value={location} onChange={setLocation} placeholder="Search city, state, country" />
+            </>
+          )}
+
+          {step === 1 && (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 750, color: T.text, marginBottom: 6 }}>Your occupation</div>
+              <div style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>Start typing and select a matching role.</div>
+              <AppInput value={occupationQuery} onChange={setOccupationQuery} placeholder="Search occupation" />
+              <div style={{ marginTop: 10, border: `1px solid ${T.border}`, borderRadius: 10, maxHeight: 200, overflowY: "auto" }}>
+                {occMatches.map((o) => (
+                  <button key={o} type="button" onClick={() => { setOccupation(o); setOccupationQuery(o); }} style={{ width: "100%", textAlign: "left", border: "none", borderBottom: `1px solid ${T.border}`, background: occupation === o ? T.primaryLight : "#fff", padding: "10px 12px", cursor: "pointer", color: T.text, fontSize: 13 }}>
+                    {o}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 750, color: T.text, marginBottom: 6 }}>Match distance</div>
+              <div style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>How far should potential matches be?</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {["30", "50", "100", "200", "any"].map((km) => (
+                  <button key={km} type="button" onClick={() => setDistance(km)} style={{ textAlign: "left", border: `1px solid ${distance === km ? T.primaryMid : T.border}`, borderRadius: 10, background: distance === km ? T.primaryLight : "#fff", padding: "10px 12px", cursor: "pointer", fontSize: 13, color: T.text }}>
+                    {km === "any" ? "Doesn't matter" : `${km} km`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{ padding: 20, borderTop: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <Btn variant="ghost" onClick={onSkip}>Skip</Btn>
+          <div style={{ display: "flex", gap: 8 }}>
+            {step > 0 && <Btn variant="ghost" onClick={() => setStep((s) => s - 1)}>Back</Btn>}
+            {step < 2 ? (
+              <Btn onClick={() => setStep((s) => s + 1)} disabled={step === 0 && !location}>
+                Continue
+              </Btn>
+            ) : (
+              <Btn onClick={complete} disabled={saving || !location || !(occupation || occupationQuery)}>
+                {saving ? <><Spinner color="#fff" /> Saving…</> : "Finish setup"}
+              </Btn>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Toggle({checked,onChange,label}){
@@ -678,11 +926,6 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
     }
   }
   function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocError("");}
-  const locationOptions = LOCATION_OPTIONS.includes(profile.location)
-    ? LOCATION_OPTIONS
-    : profile.location
-      ? [profile.location, ...LOCATION_OPTIONS]
-      : LOCATION_OPTIONS;
   const titleOptions = TITLE_OPTIONS.includes(profile.targetTitle)
     ? TITLE_OPTIONS
     : profile.targetTitle
@@ -715,13 +958,10 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
             {renderField("LinkedIn URL","linkedin","https://linkedin.com/in/jane")}
             <div style={{marginBottom:14}}>
               <FL>Location</FL>
-              <Sel
+              <LocationAutocomplete
                 value={profile.location || ""}
                 onChange={(v)=>up("location",v)}
-                options={[
-                  { value: "", label: "Select location" },
-                  ...locationOptions.map((opt)=>({ value: opt, label: opt })),
-                ]}
+                placeholder="Search location"
               />
             </div>
             {renderField("Phone","phone","+1 (555) 000-0000","tel")}
@@ -852,24 +1092,34 @@ function SuggestedView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 function SearchView({jobs,setJobs,profile}){
   const [query,setQuery]=useState("");
+  const [searchLocation,setSearchLocation]=useState(profile?.targetLocation || profile?.location || "");
+  const [remoteOnly,setRemoteOnly]=useState(false);
+  const [datePosted,setDatePosted]=useState("all");
   const [results,setResults]=useState([]);
+  const [selectedJobIdx,setSelectedJobIdx]=useState(0);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
   const [savingJobKey,setSavingJobKey]=useState("");
   const profileTitle = (profile?.targetTitle || "").trim();
-  const profileLocation = (profile?.targetLocation || profile?.location || "").trim();
   const profileKeywords = (profile?.keywords || "").trim();
   const profileCompanies = (profile?.targetCompanies || "").trim();
   const savedJobKeys = useMemo(
     () => new Set(jobs.map((j) => `${j.title || ""}::${j.company || ""}`)),
     [jobs]
   );
+  const selectedJob = results[selectedJobIdx] || null;
 
   useEffect(() => {
     if (!query && profileTitle) {
       setQuery(profileTitle);
     }
   }, [query, profileTitle]);
+
+  useEffect(() => {
+    if (!searchLocation && (profile?.targetLocation || profile?.location)) {
+      setSearchLocation(profile.targetLocation || profile.location);
+    }
+  }, [profile, searchLocation]);
 
   async function search(){
     const baseQuery = query.trim() || profileTitle;
@@ -878,7 +1128,9 @@ function SearchView({jobs,setJobs,profile}){
       return;
     }
     const parts = [baseQuery];
-    if (profileLocation) parts.push(profileLocation);
+    if (searchLocation?.trim()) parts.push(searchLocation.trim());
+    if (remoteOnly) parts.push("remote");
+    if (datePosted !== "all") parts.push(`posted ${datePosted}`);
     if (profileKeywords) parts.push(profileKeywords);
     if (profile?.useCompanyPrefs && profileCompanies) parts.push(profileCompanies);
     const finalQuery = parts.join(", ");
@@ -887,6 +1139,7 @@ function SearchView({jobs,setJobs,profile}){
     try{
       const jobsFromApi = await searchJobsByKeyword(finalQuery);
       setResults(jobsFromApi);
+      setSelectedJobIdx(0);
     }catch(e){setError(e?.message || "Search failed. Check job board API setup.");}
     setLoading(false);
   }
@@ -912,44 +1165,98 @@ function SearchView({jobs,setJobs,profile}){
 
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Job Search" subtitle="Keyword search powered by a job board API (no AI ranking)."/>
-      <div style={{padding:"18px 32px 30px",maxWidth:1180,margin:"0 auto"}}>
-        <div style={{display:"flex",gap:10,marginBottom:18}}>
-          <AppInput value={query} onChange={setQuery} placeholder='e.g. sales manager, remote data analyst, product designer' style={{flex:1}}
+      <PH title="Job Search" subtitle="LinkedIn-style search flow: search, filter, pick a role, then save."/>
+      <div style={{padding:"16px 24px 24px",maxWidth:1240,margin:"0 auto"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr auto",gap:10,marginBottom:10}}>
+          <AppInput value={query} onChange={setQuery} placeholder='e.g. customer success, account manager, frontend engineer'
             onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
-          <Btn onClick={search} disabled={loading}>{loading?<><Spinner color="#fff"/> Searching…</>:"Search"}</Btn>
+          <LocationAutocomplete value={searchLocation} onChange={setSearchLocation} placeholder="Location" compact />
+          <Btn onClick={search} disabled={loading} style={{height:40,padding:"0 20px"}}>
+            {loading?<><Spinner color="#fff"/> Searching…</>:"Search"}
+          </Btn>
         </div>
-        {(profileTitle || profileLocation) && (
-          <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>
-            Profile context: {profileTitle || "No target title"}{profileLocation ? ` · ${profileLocation}` : ""}
-          </div>
-        )}
-        {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:16}}>{error}</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
-          {results.map((job,i)=>{
-            const isSaved=savedJobKeys.has(`${job.title || ""}::${job.company || ""}`);
-            const jobKey = `${job.title}::${job.company}`;
-            const saving = savingJobKey === jobKey;
-            return(
-              <Card key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                  <div style={{flex:1,marginRight:10}}>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:2}}>{job.title}</div>
-                    <div style={{fontSize:12,color:T.primary,fontWeight:600}}>{job.company}</div>
-                    <div style={{fontSize:11,color:T.textMute,marginTop:2}}>{job.location}</div>
+
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+          <button onClick={()=>setRemoteOnly(v=>!v)} style={{
+            border:`1px solid ${remoteOnly ? "#0F766E" : T.border}`,
+            background:remoteOnly ? "#0F766E" : "#fff",
+            color:remoteOnly ? "#fff" : T.text,
+            borderRadius:999,padding:"7px 14px",fontSize:13,fontWeight:700,cursor:"pointer"
+          }}>Remote {remoteOnly ? "✓" : ""}</button>
+          <Sel value={datePosted} onChange={setDatePosted} options={[
+            { value: "all", label: "Date posted: Any time" },
+            { value: "past 24 hours", label: "Past 24 hours" },
+            { value: "past week", label: "Past week" },
+            { value: "past month", label: "Past month" },
+          ]} style={{width:220,padding:"8px 12px",fontSize:13}} />
+          {(profileTitle || profile?.location) && (
+            <span style={{fontSize:12,color:T.textSub}}>Using profile defaults: {profileTitle || "title not set"}{profile?.location ? ` · ${profile.location}` : ""}</span>
+          )}
+        </div>
+
+        {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:12}}>{error}</div>}
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1.2fr",gap:12,minHeight:520}}>
+          <Card style={{padding:0,overflow:"hidden"}}>
+            <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,background:"#1865B7",color:"#fff"}}>
+              <div style={{fontSize:14,fontWeight:700}}>{query || profileTitle || "Search"} in {searchLocation || "Any location"}</div>
+              <div style={{fontSize:12,opacity:0.9}}>{results.length} result{results.length===1?"":"s"}</div>
+            </div>
+            <div style={{maxHeight:560,overflowY:"auto"}}>
+              {results.length===0 && (
+                <div style={{padding:20,fontSize:13,color:T.textSub}}>Run a search to see job matches.</div>
+              )}
+              {results.map((job,i)=>{
+                const active = i === selectedJobIdx;
+                return (
+                  <button key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`} type="button" onClick={()=>setSelectedJobIdx(i)} style={{
+                    display:"block",width:"100%",textAlign:"left",border:"none",borderBottom:`1px solid ${T.border}`,padding:"12px 14px",
+                    background:active ? "#EEF4FF" : "#fff",cursor:"pointer"
+                  }}>
+                    <div style={{fontSize:16,fontWeight:750,color:active?T.primary:T.text,marginBottom:3}}>{job.title}</div>
+                    <div style={{fontSize:13,color:T.text,fontWeight:650}}>{job.company}</div>
+                    <div style={{fontSize:12,color:T.textSub,marginTop:2}}>{job.location}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card style={{padding:18}}>
+            {!selectedJob && (
+              <div style={{fontSize:14,color:T.textSub}}>Select a job to preview details.</div>
+            )}
+            {selectedJob && (() => {
+              const isSaved = savedJobKeys.has(`${selectedJob.title || ""}::${selectedJob.company || ""}`);
+              const jobKey = `${selectedJob.title}::${selectedJob.company}`;
+              const saving = savingJobKey === jobKey;
+              return (
+                <>
+                  <div style={{fontSize:14,color:T.textSub,marginBottom:8}}>{selectedJob.company}</div>
+                  <h2 style={{margin:"0 0 8px",fontSize:42,lineHeight:1.05,color:T.text,letterSpacing:"-0.7px"}}>{selectedJob.title}</h2>
+                  <div style={{fontSize:16,color:T.textSub,marginBottom:12}}>{selectedJob.location}</div>
+                  <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                    <Chip label={remoteOnly ? "Remote" : "Open"} color={T.teal} />
+                    <Chip label={datePosted === "all" ? "Any date" : datePosted} color={T.amber} />
+                    <Chip label={selectedJob.source || "jsearch"} color={T.violet} />
                   </div>
-                  <Btn onClick={()=>saveJob(job)} disabled={isSaved || saving} variant={isSaved?"success":"secondary"} small>
-                    {saving ? <><Spinner/> Saving…</> : isSaved?"✓ Saved":"+ Save"}
-                  </Btn>
-                </div>
-                <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>{job.description}</div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
-                  <span style={{fontSize:11,color:T.textMute}}>Source: {job.source || "job_board_api"}</span>
-                  {job.apply_url && <a href={job.apply_url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>View</a>}
-                </div>
-              </Card>
-            );
-          })}
+                  <div style={{display:"flex",gap:8,marginBottom:14}}>
+                    <Btn onClick={()=>saveJob(selectedJob)} disabled={isSaved || saving} variant={isSaved ? "success" : "secondary"}>
+                      {saving ? <><Spinner/> Saving…</> : isSaved ? "✓ Saved" : "Save"}
+                    </Btn>
+                    {selectedJob.apply_url && (
+                      <a href={selectedJob.apply_url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 16px",border:`1px solid ${T.border}`,borderRadius:10,color:T.text,textDecoration:"none",fontSize:13,fontWeight:650}}>
+                        View Listing
+                      </a>
+                    )}
+                  </div>
+                  <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,maxHeight:300,overflowY:"auto",paddingRight:4}}>
+                    {selectedJob.description || "No description provided by source."}
+                  </div>
+                </>
+              );
+            })()}
+          </Card>
         </div>
       </div>
     </div>
@@ -1309,9 +1616,11 @@ export default function App(){
   const [loggedIn,setLoggedIn]=useState(false);
   const [bootstrappingAuth,setBootstrappingAuth]=useState(true);
   const [userName,setUserName]=useState("");
+  const [userId,setUserId]=useState("");
   const [docs,setDocs]=useState([]);
   const [jobs,setJobs]=useState([]);
   const [profile,setProfileState]=useState({ name: "" });
+  const [showOnboarding,setShowOnboarding]=useState(false);
 
   // Load data from Supabase after login
   async function loadData(){
@@ -1347,6 +1656,7 @@ export default function App(){
             "";
 
           setUserName(displayName);
+          setUserId(data.user.id);
           setProfileState((prev) => ({ ...prev, name: prev.name || displayName || "" }));
           setLoggedIn(true);
           await loadData();
@@ -1375,10 +1685,37 @@ export default function App(){
       setDocs([]);
       setJobs([]);
       setProfileState({ name: "" });
+      setUserId("");
+      setShowOnboarding(false);
       setUserName("");
       setLoggedIn(false);
       setBootstrappingAuth(false);
     }
+  }
+
+  useEffect(() => {
+    if (!loggedIn || !userId) return;
+    const key = `onboarding_done_${userId}`;
+    const done = localStorage.getItem(key) === "1";
+    setShowOnboarding(!done && needsOnboarding(profile));
+  }, [loggedIn, userId, profile]);
+
+  async function handleFinishOnboarding(updates) {
+    try {
+      const savedProfile = await store.setProfile({ ...profile, ...updates });
+      setProfileState((prev) => ({ ...prev, ...(savedProfile || updates) }));
+    } catch (e) {
+      console.error("Onboarding save failed:", e);
+      setProfileState((prev) => ({ ...prev, ...updates }));
+    } finally {
+      if (userId) localStorage.setItem(`onboarding_done_${userId}`, "1");
+      setShowOnboarding(false);
+    }
+  }
+
+  function handleSkipOnboarding() {
+    if (userId) localStorage.setItem(`onboarding_done_${userId}`, "1");
+    setShowOnboarding(false);
   }
 
   if (bootstrappingAuth) {
@@ -1400,14 +1737,19 @@ export default function App(){
           body{font-family:'Outfit',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
           input::placeholder{color:#94A3B8;}
         `}</style>
-        <LandingPage onLogin={async (name)=>{
+        <LandingPage onLogin={async (name, id)=>{
           setUserName(name);
+          setUserId(id || "");
           setProfileState((prev) => ({ ...prev, name: name || prev.name || "" }));
           setLoggedIn(true);
           await loadData();
         }}/>
       </>
     );
+  }
+
+  if (showOnboarding) {
+    return <OnboardingFlow profile={profile} onSave={handleFinishOnboarding} onSkip={handleSkipOnboarding} />;
   }
 
   return(
