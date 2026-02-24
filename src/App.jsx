@@ -100,13 +100,6 @@ const OCCUPATION_OPTIONS = Array.from(new Set([
 
 async function searchJobsByKeyword(query) {
   const requestBody = { query, page: 1, numPages: 1, country: "us,ca", datePosted: "all" };
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) {
-    throw new Error("Missing Supabase URL or anon key.");
-  }
-  
-  // FIX: Get the user's access token instead of using anon key
   const supabase = getSupabaseClient();
   const { data: { session } } = await supabase.auth.getSession();
   
@@ -114,19 +107,12 @@ async function searchJobsByKeyword(query) {
     throw new Error("No active session. Please log in again.");
   }
 
-  const res = await fetch(`${supabaseUrl}/functions/v1/job-search`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: anonKey,
-      Authorization: `Bearer ${session.access_token}`, // Use user's access token
-    },
-    body: JSON.stringify(requestBody),
+  // Use invoke so Supabase sends project-correct auth/apikey headers.
+  const { data, error } = await supabase.functions.invoke("job-search", {
+    body: requestBody,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data?.message || data?.error || `Job search function failed (${res.status}).`);
-  }
+
+  if (error) throw new Error(error.message || "Job search function failed.");
 
   if (data?.error) {
     throw new Error(data.error);
