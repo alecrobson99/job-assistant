@@ -5,16 +5,21 @@ set -euo pipefail
 echo "Setting up Job Search Edge Function..."
 echo
 
-if ! command -v supabase >/dev/null 2>&1; then
+if command -v supabase >/dev/null 2>&1; then
+  SUPABASE_CMD="supabase"
+  echo "Supabase CLI found"
+elif command -v npx >/dev/null 2>&1; then
+  SUPABASE_CMD="npx supabase"
+  echo "Using Supabase CLI via npx"
+else
   echo "Supabase CLI not found."
   echo
   echo "Install options:"
   echo "  macOS/Linux: brew install supabase/tap/supabase"
   echo "  npm: npm install -g supabase"
+  echo "  or use npx from npm"
   exit 1
 fi
-
-echo "Supabase CLI found"
 
 mkdir -p supabase/functions/job-search
 
@@ -131,11 +136,11 @@ fi
 
 echo
 echo "Setting RAPIDAPI_KEY secret..."
-supabase secrets set RAPIDAPI_KEY="$RAPIDAPI_KEY"
+$SUPABASE_CMD secrets set RAPIDAPI_KEY="$RAPIDAPI_KEY"
 
 echo
 echo "Deploying job-search edge function..."
-supabase functions deploy job-search
+$SUPABASE_CMD functions deploy job-search
 
 echo
 echo "Success. job-search deployed."
