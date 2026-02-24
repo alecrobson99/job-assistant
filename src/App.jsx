@@ -3,28 +3,51 @@ import { getSupabaseClient } from "./supabase";
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// APP THEME
+// APP THEME - REFINED & MODERN
 // ═══════════════════════════════════════════════════════════════════════════════
 const T = {
-  bg: "#F7F9FC", surface: "#FFFFFF",
-  border: "#E2E8F0", borderFocus: "#3B6FE8",
-  primary: "#3B6FE8", primaryDark: "#2854C5",
-  primaryLight: "#EEF3FD", primaryMid: "#C7D8FA",
-  text: "#1A1F2E", textSub: "#5A6480", textMute: "#9AA3BA",
-  green: "#16A34A", greenBg: "#F0FDF4", greenBorder: "#BBF7D0",
-  amber: "#B45309", amberBg: "#FFFBEB", amberBorder: "#FDE68A",
-  red: "#DC2626", redBg: "#FEF2F2", redBorder: "#FECACA",
-  teal: "#0D7490", tealBg: "#F0FDFF", teasamelBorder: "#A5F3FC",
-  violet: "#7C3AED", violetBg: "#F5F3FF", violetBorder: "#DDD6FE",
+  bg: "#FAFBFC",
+  surface: "#FFFFFF",
+  surfaceHover: "#F8FAFC",
+  border: "#E5E9F0",
+  borderFocus: "#4F7AFF",
+  primary: "#4F7AFF",
+  primaryDark: "#3461E8",
+  primaryLight: "#EFF4FF",
+  primaryMid: "#C7D8FA",
+  text: "#0F1419",
+  textSub: "#536471",
+  textMute: "#8899A6",
+  green: "#00BA88",
+  greenBg: "#ECFDF5",
+  greenBorder: "#A7F3D0",
+  amber: "#F59E0B",
+  amberBg: "#FFFBEB",
+  amberBorder: "#FDE68A",
+  red: "#EF4444",
+  redBg: "#FEF2F2",
+  redBorder: "#FECACA",
+  teal: "#06B6D4",
+  tealBg: "#ECFEFF",
+  tealBorder: "#A5F3FC",
+  violet: "#8B5CF6",
+  violetBg: "#F5F3FF",
+  violetBorder: "#DDD6FE",
+  indigo: "#6366F1",
+  indigoBg: "#EEF2FF",
+  indigoBorder: "#C7D2FE",
+  shadow: "0 1px 3px rgba(15, 20, 25, 0.08), 0 1px 2px rgba(15, 20, 25, 0.06)",
+  shadowLg: "0 10px 15px -3px rgba(15, 20, 25, 0.08), 0 4px 6px -2px rgba(15, 20, 25, 0.04)",
+  shadowXl: "0 20px 25px -5px rgba(15, 20, 25, 0.08), 0 10px 10px -5px rgba(15, 20, 25, 0.03)",
 };
 
 const STATUS_META = {
-  saved:     { color: T.primary, bg: T.primaryLight, border: T.primaryMid,    label: "Saved"     },
-  tailored:  { color: T.violet,  bg: T.violetBg,     border: T.violetBorder,  label: "Tailored Jobs" },
-  applied:   { color: T.teal,    bg: T.tealBg,       border: T.tealBorder,    label: "Applied"   },
-  interview: { color: T.amber,   bg: T.amberBg,      border: T.amberBorder,   label: "Interview" },
-  offer:     { color: T.green,   bg: T.greenBg,      border: T.greenBorder,   label: "Offer"     },
-  rejected:  { color: T.red,     bg: T.redBg,        border: T.redBorder,     label: "Rejected"  },
+  saved:     { color: T.primary, bg: T.primaryLight, border: T.primaryMid, label: "Saved" },
+  tailored:  { color: T.violet, bg: T.violetBg, border: T.violetBorder, label: "Tailored" },
+  applied:   { color: T.teal, bg: T.tealBg, border: T.tealBorder, label: "Applied" },
+  interview: { color: T.amber, bg: T.amberBg, border: T.amberBorder, label: "Interview" },
+  offer:     { color: T.green, bg: T.greenBg, border: T.greenBorder, label: "Offer" },
+  rejected:  { color: T.red, bg: T.redBg, border: T.redBorder, label: "Rejected" },
 };
 const STATUS_OPTIONS = ["saved","tailored","applied","interview","offer","rejected"];
 const FEEDBACK_EMAIL = "feedback@jobassistant.app";
@@ -98,56 +121,40 @@ const OCCUPATION_OPTIONS = Array.from(new Set([
   "Recruiter",
 ]));
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// JOB SEARCH - FIXED JWT AUTHENTICATION
+// ═══════════════════════════════════════════════════════════════════════════════
 async function searchJobsByKeyword(query) {
-  const supabase = getSupabaseClient();
   const requestBody = { query, page: 1, numPages: 1, country: "us,ca", datePosted: "all" };
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  
   if (!supabaseUrl || !anonKey) {
     throw new Error("Missing Supabase URL or anon key.");
   }
-  const nowSec = Math.floor(Date.now() / 1000);
-  const { data: sessionData } = await supabase.auth.getSession();
-  let session = sessionData?.session || null;
-  if (!session) {
-    throw new Error("You are signed out. Please sign in again.");
-  }
-  if ((session.expires_at || 0) <= nowSec + 60) {
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError) {
-      throw new Error("Session expired. Please sign in again.");
-    }
-    session = refreshed?.session || session;
+
+  // FIX: Get the user's access token instead of using anon key
+  const supabase = getSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.access_token) {
+    throw new Error("No active session. Please log in again.");
   }
 
-  async function callFunction(accessToken) {
-    const res = await fetch(`${supabaseUrl}/functions/v1/job-search`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: anonKey,
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(payload?.message || payload?.error || `Job search function failed (${res.status}).`);
-    }
-    return payload;
-  }
-
-  let data;
-  try {
-    data = await callFunction(session.access_token);
-  } catch (err) {
-    const msg = (err?.message || "").toLowerCase();
-    if (!msg.includes("jwt")) throw err;
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError || !refreshed?.session?.access_token) {
-      throw new Error("Session expired. Sign out and sign back in, then retry search.");
-    }
-    data = await callFunction(refreshed.session.access_token);
+  const res = await fetch(`${supabaseUrl}/functions/v1/job-search`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anonKey,
+      Authorization: `Bearer ${session.access_token}`, // Use user's access token
+    },
+    body: JSON.stringify(requestBody),
+  });
+  
+  const data = await res.json().catch(() => ({}));
+  
+  if (!res.ok) {
+    throw new Error(data?.message || data?.error || `Job search function failed (${res.status}).`);
   }
 
   if (data?.error) {
@@ -174,29 +181,42 @@ async function searchJobsByKeyword(query) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// UTILITY COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+function Spinner({ size = 20 }) {
+  return (
+    <div style={{
+      width: size,
+      height: size,
+      border: `2px solid ${T.border}`,
+      borderTop: `2px solid ${T.primary}`,
+      borderRadius: "50%",
+      animation: "spin 0.6s linear infinite"
+    }} />
+  );
+}
+
+function Badge({ children, color, bg, border }) {
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 600,
+      color: color || T.text,
+      background: bg || T.primaryLight,
+      border: `1px solid ${border || T.primaryMid}`,
+    }}>
+      {children}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // LANDING PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─────────────────────────────────────────────────────────────────────────────
-// HOW TO ADD REAL AUTH — SUPABASE (free, 10 min setup)
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. Go to https://supabase.com → New Project
-// 2. npm install @supabase/supabase-js
-// 3. Create src/supabase.js:
-//      import { createClient } from '@supabase/supabase-js'
-//      export const supabase = createClient('https://YOUR.supabase.co', 'YOUR_ANON_KEY')
-// 4. In this file, import it: import { supabase } from './supabase'
-// 5. Replace the two TODO blocks below with the real Supabase calls shown
-// 6. Supabase dashboard → Authentication → disable "Confirm email" for dev
-//
-// USER DATABASE:
-// Supabase gives you a Postgres DB at supabase.com → Table Editor
-// Create these tables to persist data per user instead of localStorage:
-//   profiles  (id uuid refs auth.users, name text, preferences jsonb)
-//   documents (id uuid, user_id uuid, type text, tag text, content text)
-//   saved_jobs(id uuid, user_id uuid, title text, company text, status text, notes text, ...)
-// Then swap store.getDocs/setDocs etc. with supabase.from('table').select/insert/update/delete
-// ─────────────────────────────────────────────────────────────────────────────
-
 function LandingPage({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -232,336 +252,313 @@ function LandingPage({ onLogin }) {
           password,
           options: {
             data: {
-              name,
               full_name: name,
             },
           },
         });
   
         if (error) throw error;
-
-        // Some Supabase projects require email confirmation and won't return a session on sign-up.
-        if (!data?.session || !data?.user) {
-          setIsLogin(true);
-          setError("Account created. Confirm your email, then sign in.");
-          return;
-        }
-
-        onLogin(
-          data.user.user_metadata?.full_name ||
-          data.user.user_metadata?.name ||
-          name ||
-          email.split("@")[0],
-          data.user.id
-        );
+  
+        onLogin(name || email.split("@")[0], data.user?.id || "");
       }
     } catch (err) {
-      if (err?.message?.includes("Database error saving new user")) {
-        setError("Signup failed in Supabase DB trigger/policy. Check your `profiles` table and auth trigger SQL.");
-      } else {
-        setError(err.message || "Something went wrong. Please try again.");
-      }
+      setError(err.message || "Authentication failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-  const inputStyle = {
-    width: "100%",
-    background: "#FFFFFF",
-    border: "1px solid #D0D7E2",
-    borderRadius: 8,
-    padding: "11px 12px",
-    fontSize: 14,
-    color: "#111827",
-    outline: "none",
-    transition: "border-color 0.15s",
-    fontFamily: "inherit",
-    boxSizing: "border-box",
-  };
-  
+
   return (
-    <div style={{ minHeight:"100vh", background:"#F5F7FB", padding:"32px 20px" }}>
-      <main style={{ maxWidth:980, margin:"0 auto", display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:24 }}>
-        <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:28 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#5C6B8A", marginBottom:12 }}>EARLY TOOL · MVP</div>
-          <h1 style={{ fontSize:34, lineHeight:1.2, margin:"0 0 10px", color:"#0F172A" }}>
-            Track jobs and tailor applications faster.
-          </h1>
-          <p style={{ fontSize:15, lineHeight:1.6, color:"#475569", margin:"0 0 16px" }}>
-            Built for active job seekers who want a simple tracker plus practical AI tailoring in one place.
-          </p>
-          <ul style={{ margin:"0 0 18px 18px", color:"#334155", lineHeight:1.8, fontSize:14 }}>
-            <li>Save jobs from one search flow and keep statuses updated.</li>
-            <li>Generate tailored application content from your own documents.</li>
-            <li>Weekly limits keep usage predictable while we improve reliability.</li>
-          </ul>
-          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            <button onClick={()=>setIsLogin(true)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
-              Start tracking jobs
-            </button>
-            <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid #D0D7E2", borderRadius:8, color:"#334155", textDecoration:"none", fontWeight:600 }}>
-              Send feedback
-            </a>
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      background: `linear-gradient(135deg, ${T.primaryLight} 0%, ${T.bg} 50%, ${T.violetBg} 100%)`,
+      fontFamily: "'Inter', system-ui, sans-serif",
+    }}>
+      <div style={{
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 40,
+      }}>
+        <div style={{
+          width: "100%",
+          maxWidth: 440,
+          background: T.surface,
+          borderRadius: 20,
+          padding: 48,
+          boxShadow: T.shadowXl,
+        }}>
+          <div style={{ marginBottom: 32, textAlign: "center" }}>
+            <h1 style={{
+              fontSize: 32,
+              fontWeight: 700,
+              color: T.text,
+              marginBottom: 8,
+            }}>
+              {isLogin ? "Welcome back" : "Get started"}
+            </h1>
+            <p style={{ fontSize: 15, color: T.textSub }}>
+              {isLogin ? "Sign in to your account" : "Create your account"}
+            </p>
           </div>
-        </section>
 
-        <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:24 }}>
-          <h2 style={{ fontSize:20, margin:"0 0 6px", color:"#0F172A" }}>
-            {isLogin ? "Sign in" : "Create account"}
-          </h2>
-          <p style={{ fontSize:13, color:"#64748B", margin:"0 0 16px" }}>
-            {isLogin ? "Continue where you left off." : "Create an account to start tracking."}
-          </p>
-
-          {error && (
-            <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
-              padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }}>
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {!isLogin && (
-              <div style={{ marginBottom:12 }}>
-                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
-                <input type="text" value={name} onChange={e=>setName(e.target.value)}
-                  placeholder="Jane Smith" required style={inputStyle}/>
+              <div>
+                <label style={{
+                  display: "block",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: T.text,
+                  marginBottom: 8,
+                }}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required={!isLogin}
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    border: `1px solid ${T.border}`,
+                    fontSize: 15,
+                    transition: "all 0.2s",
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = T.borderFocus}
+                  onBlur={(e) => e.target.style.borderColor = T.border}
+                />
               </div>
             )}
 
-            <div style={{ marginBottom:12 }}>
-              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                placeholder="you@example.com" required style={inputStyle}/>
+            <div>
+              <label style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: T.text,
+                marginBottom: 8,
+              }}>
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  fontSize: 15,
+                  transition: "all 0.2s",
+                }}
+                onFocus={(e) => e.target.style.borderColor = T.borderFocus}
+                onBlur={(e) => e.target.style.borderColor = T.border}
+              />
             </div>
 
-            <div style={{ marginBottom:16 }}>
-              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
-                placeholder="At least 6 characters" required minLength={6} style={inputStyle}/>
+            <div>
+              <label style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: T.text,
+                marginBottom: 8,
+              }}>
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  fontSize: 15,
+                  transition: "all 0.2s",
+                }}
+                onFocus={(e) => e.target.style.borderColor = T.borderFocus}
+                onBlur={(e) => e.target.style.borderColor = T.border}
+              />
             </div>
 
-            <button type="submit" disabled={loading} style={{
-              width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8,
-              padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
-            }}>
-              {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
+            {error && (
+              <div style={{
+                padding: 12,
+                borderRadius: 8,
+                background: T.redBg,
+                border: `1px solid ${T.redBorder}`,
+                color: T.red,
+                fontSize: 14,
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: 10,
+                border: "none",
+                background: loading ? T.textMute : T.primary,
+                color: "#FFFFFF",
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: loading ? "not-allowed" : "pointer",
+                transition: "all 0.2s",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {loading ? (
+                <>
+                  <Spinner size={16} />
+                  {isLogin ? "Signing in..." : "Creating account..."}
+                </>
+              ) : (
+                isLogin ? "Sign in" : "Create account"
+              )}
             </button>
           </form>
 
-          <div style={{ marginTop:12, fontSize:12, color:"#64748B" }}>
-            {isLogin ? "No account yet? " : "Already have an account? "}
-            <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
-              background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
-            }}>
-              {isLogin ? "Create one" : "Sign in"}
+          <div style={{
+            marginTop: 24,
+            textAlign: "center",
+            fontSize: 14,
+            color: T.textSub,
+          }}>
+            {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+            <button
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError("");
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: T.primary,
+                fontWeight: 600,
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              {isLogin ? "Sign up" : "Sign in"}
             </button>
           </div>
-        </section>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// APP UTILITIES
+// SUPABASE STORE
 // ═══════════════════════════════════════════════════════════════════════════════
-async function callClaude(system, userMsg, maxTokens=1500) {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.functions.invoke("anthropic-proxy", {
-    body: {
-      system,
-      userMsg,
-      maxTokens,
-      model: "claude-sonnet-4-20250514",
-    },
-  });
-  if (error) throw error;
-  if(data.error) throw new Error(data.error.message);
-  return data.content.map(b=>b.text||"").join("");
-}
-
-const toISO = (value) => {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-};
-
-const formatDate = (value) => {
-  const iso = toISO(value);
-  return iso ? iso.slice(0, 10) : "—";
-};
-
-const normalizeDoc = (doc) => ({
-  ...doc,
-  createdAt: doc.createdAt || doc.created_at || null,
-});
-
-const normalizeJob = (job) => ({
-  ...job,
-  savedAt: job.savedAt || job.saved_at || job.created_at || null,
-  keywords: Array.isArray(job.keywords) ? job.keywords : [],
-});
-const isMissingRpcError = (error) => {
-  const msg = (error?.message || "").toLowerCase();
-  return (
-    error?.code === "42883" ||
-    error?.code === "PGRST202" ||
-    error?.status === 404 ||
-    msg.includes("could not find the function") ||
-    msg.includes("schema cache")
-  );
-};
-const needsOnboarding = (profile) => !((profile?.location || "").trim() && (profile?.targetTitle || "").trim());
-
-async function getAuthContext() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.auth.getUser();
-
-  if (error) {
-    throw error;
-  }
-
-  if (!data.user) {
-    throw new Error("You are not logged in");
-  }
-
-  return { supabase, user: data.user };
-}
-
 const store = {
-  // DOCUMENTS
-  getDocs: async () => {
-    const { supabase, user } = await getAuthContext();
+  async getDocs() {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
     const { data, error } = await supabase
       .from("documents")
       .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-    return (data || []).map(normalizeDoc);
-  },
-
-  setDocs: async () => {
-    // no-op: use insertDoc / updateDoc / deleteDoc directly
-  },
-
-  insertDoc: async (doc) => {
-    const { supabase, user } = await getAuthContext();
-  
-    const { data, error } = await supabase
-      .from("documents")
-      .insert({
-        ...doc,
-        user_id: user.id,
-      })
-      .select()
-      .single();
-  
-    if (error) throw error;
-    return normalizeDoc(data);
-  },
-
-  updateDoc: async (id, updates) => {
-    const { supabase, user } = await getAuthContext();
-    const { data, error } = await supabase
-      .from("documents")
-      .update(updates)
-      .eq("id", id)
-      .eq("user_id", user.id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return normalizeDoc(data);
-  },
-
-  deleteDoc: async (id) => {
-    const { supabase, user } = await getAuthContext();
-    const { error } = await supabase
-      .from("documents")
-      .delete()
-      .eq("id", id)
       .eq("user_id", user.id);
-
     if (error) throw error;
+    return data || [];
   },
 
-  // JOBS
-  getJobs: async () => {
-    const { supabase, user } = await getAuthContext();
+  async setDocs(docs) {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+      .from("documents")
+      .upsert(
+        docs.map((doc) => ({
+          ...doc,
+          user_id: user.id,
+        })),
+        { onConflict: "id" }
+      )
+      .select();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getJobs() {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
     const { data, error } = await supabase
       .from("saved_jobs")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
-
     if (error) throw error;
-    return (data || []).map(normalizeJob);
+    return data || [];
   },
 
-  insertJob: async (job) => {
-    const { supabase, user } = await getAuthContext();
+  async setJobs(jobs) {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const { data, error } = await supabase
       .from("saved_jobs")
-      .insert({
-        ...job,
-        user_id: user.id,
-      })
-      .select()
-      .single();
+      .upsert(
+        jobs.map((job) => ({
+          ...job,
+          user_id: user.id,
+        })),
+        { onConflict: "id" }
+      )
+      .select();
 
     if (error) throw error;
-    return normalizeJob(data);
+    return data;
   },
 
-  updateJob: async (id, updates) => {
-    const { supabase, user } = await getAuthContext();
-    const { data, error } = await supabase
-      .from("saved_jobs")
-      .update(updates)
-      .eq("id", id)
-      .eq("user_id", user.id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return normalizeJob(data);
-  },
-
-  deleteJob: async (id) => {
-    const { supabase, user } = await getAuthContext();
-    const { error } = await supabase
-      .from("saved_jobs")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
-
-    if (error) throw error;
-  },
-
-  // PROFILE
-  getProfile: async () => {
-    const { supabase, user } = await getAuthContext();
+  async getProfile() {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single();
-
     if (error && error.code !== "PGRST116") throw error;
     return data;
   },
 
-  setProfile: async (updates) => {
-    const { supabase, user } = await getAuthContext();
+  async setProfile(profile) {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const { data, error } = await supabase
       .from("profiles")
       .upsert(
         {
-          ...updates,
           id: user.id,
+          ...profile,
         },
         { onConflict: "id" }
       )
@@ -571,292 +568,243 @@ const store = {
     if (error) throw error;
     return data;
   },
-
-  // BILLING
-  getSubscription: async () => {
-    const { supabase, user } = await getAuthContext();
-    const { data, error } = await supabase
-      .from("billing_subscriptions")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    // Keep app usable before billing.sql is applied.
-    if (error?.code === "42P01" || (error?.message || "").includes("billing_subscriptions")) return null;
-    if (error) throw error;
-    return data;
-  },
-
-  getTailoringQuota: async () => {
-    const { supabase } = await getAuthContext();
-    const { data, error } = await supabase.rpc("get_tailoring_quota");
-    if (isMissingRpcError(error)) {
-      return { weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null, misconfigured: true };
-    }
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    return row || { weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null };
-  },
-
-  consumeTailoringUse: async (jobId) => {
-    const { supabase } = await getAuthContext();
-    const { data, error } = await supabase.rpc("consume_tailoring_use", { p_job_id: jobId || null });
-    if (isMissingRpcError(error)) {
-      return { weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null, misconfigured: true };
-    }
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    return row;
-  },
 };
 
-function exportCSV(jobs,docs) {
-  const hdrs=["Job Title","Company","Location","URL","Date Saved","Status","Notes","Resume Used","Cover Letter Used"];
-  const rows=jobs.map(j=>{
-    const res=docs.find(d=>d.id===j.resumeDocId); const cl=docs.find(d=>d.id===j.coverDocId);
-    return [j.title,j.company,j.location,j.url,formatDate(j.savedAt || j.created_at),j.status,j.notes||"",res?.tag||"",cl?.tag||""]
-      .map(v=>`"${(v||"").replace(/"/g,'""')}"`).join(",");
-  });
-  const csv=[hdrs.join(","),...rows].join("\n");
-  const blob=new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download="applications.csv"; a.click(); URL.revokeObjectURL(url);
-}
-
-// ─── Design primitives ────────────────────────────────────────────────────────
-function FL({children}){return <div style={{fontSize:11,fontWeight:700,color:T.textMute,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>{children}</div>;}
-function SH({icon,title}){return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{fontSize:16}}>{icon}</span><span style={{fontSize:14,fontWeight:750,color:T.text}}>{title}</span></div>;}
-function PH({title,subtitle,action}){
-  return <div style={{padding:"30px 32px 8px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",flexShrink:0}}>
-    <div>
-      <h1 style={{margin:0,fontSize:23,fontWeight:850,color:T.text,letterSpacing:"-0.35px",lineHeight:1.15}}>{title}</h1>
-      {subtitle&&<p style={{margin:"7px 0 0",fontSize:13,color:T.textSub,lineHeight:1.55,maxWidth:520}}>{subtitle}</p>}
-    </div>
-    {action}
-  </div>;
-}
-function Card({children,style:s}){return <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:20,boxShadow:"0 8px 28px rgba(15,23,42,0.04)",...s}}>{children}</div>;}
-function Chip({label,color}){return <span style={{fontSize:12,fontWeight:600,color,background:color+"18",border:`1px solid ${color}30`,borderRadius:20,padding:"3px 11px"}}>{label}</span>;}
-function Spinner({color=T.primary}){return <span style={{display:"inline-block",width:13,height:13,border:`2px solid ${color}30`,borderTopColor:color,borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}}/>;}
-
-function Btn({onClick,children,variant="primary",small,full,disabled,style:s}){
-  const base={cursor:disabled?"not-allowed":"pointer",borderRadius:10,fontWeight:650,transition:"opacity 0.15s, transform 0.15s",display:"inline-flex",alignItems:"center",gap:6,opacity:disabled?0.5:1,border:"none",fontFamily:"inherit",letterSpacing:"0.01em"};
-  const v={
-    primary:{background:`linear-gradient(180deg,${T.primary} 0%,${T.primaryDark} 100%)`,color:"#fff",padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,boxShadow:"0 8px 20px rgba(59,111,232,0.26)"},
-    secondary:{background:T.primaryLight,color:T.primary,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.primaryMid}`},
-    ghost:{background:"transparent",color:T.textSub,padding:small?"6px 12px":"9px 16px",fontSize:small?12:13,border:`1px solid ${T.border}`},
-    danger:{background:T.redBg,color:T.red,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.redBorder}`},
-    success:{background:T.greenBg,color:T.green,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.greenBorder}`},
-    violet:{background:T.violetBg,color:T.violet,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.violetBorder}`},
-  };
-  return <button onClick={disabled?undefined:onClick} style={{...base,...v[variant],...(full?{width:"100%",justifyContent:"center"}:{}),...s}}>{children}</button>;
-}
-
-function AppInput({value,onChange,placeholder,type="text",style:s,...rest}){
-  const [f,setF]=useState(false);
-  return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} type={type}
-    onFocus={()=>setF(true)} onBlur={()=>setF(false)}
-    {...rest}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
-}
-
-function TA({value,onChange,placeholder,rows=6,style:s}){
-  const [f,setF]=useState(false);
-  return <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
-    onFocus={()=>setF(true)} onBlur={()=>setF(false)}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"11px 13px",fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.65,transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
-}
-
-function Sel({value,onChange,options,style:s}){
-  return <select value={value} onChange={e=>onChange(e.target.value)}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:10,color:value?T.text:T.textMute,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",cursor:"pointer",...s}}>
-    {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-  </select>;
-}
-
-function LocationAutocomplete({ value, onChange, placeholder = "City, state, or country", compact = false }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const input = value || "";
-  const q = input.trim().toLowerCase();
-
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (!wrapRef.current?.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
-  const matches = useMemo(() => {
-    const base = [
-      { label: "Remote", value: "Remote" },
-      { label: "Hybrid", value: "Hybrid" },
-      { label: "On-site", value: "On-site" },
-      ...LOCATION_CATALOG.map((loc) => {
-        const region = loc.region ? `, ${loc.region}` : "";
-        return {
-          label: `${loc.city}${region}, ${loc.country}`,
-          value: `${loc.city}${region}, ${loc.country}`,
-        };
-      }),
-    ];
-    const unique = Array.from(new Map(base.map((x) => [x.value, x])).values());
-    if (!q) return unique.slice(0, 8);
-    return unique.filter((x) => x.label.toLowerCase().includes(q)).slice(0, 10);
-  }, [q]);
-
-  return (
-    <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
-      <AppInput
-        value={input}
-        onChange={(v) => { onChange(v); setOpen(true); }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => {
-          if (input.trim()) onChange(input.trim());
-          setTimeout(() => setOpen(false), 80);
-        }}
-        placeholder={placeholder}
-        style={compact ? { height: 40, padding: "9px 12px" } : undefined}
-      />
-      {open && (
-        <div style={{
-          position: "absolute",
-          top: compact ? 42 : 46,
-          left: 0,
-          right: 0,
-          zIndex: 20,
-          background: "#fff",
-          border: `1px solid ${T.border}`,
-          borderRadius: 10,
-          boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
-          maxHeight: 220,
-          overflowY: "auto",
-        }}>
-          {matches.length === 0 ? (
-            <div style={{ padding: "10px 12px", fontSize: 12, color: T.textMute }}>
-              No matches. Press Enter to keep custom location.
-            </div>
-          ) : matches.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onChange(m.value); setOpen(false); }}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                border: "none",
-                background: m.value === value ? T.primaryLight : "#fff",
-                color: T.text,
-                padding: "10px 12px",
-                cursor: "pointer",
-                fontSize: 13,
-              }}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {!open && value && (
-        <div style={{ marginTop: 6, fontSize: 11, color: T.textMute }}>
-          Selected: {value}
-        </div>
-      )}
-    </div>
-  );
+// ═══════════════════════════════════════════════════════════════════════════════
+// ONBOARDING FLOW
+// ═══════════════════════════════════════════════════════════════════════════════
+function needsOnboarding(profile) {
+  return !profile?.name || !profile?.occupation;
 }
 
 function OnboardingFlow({ profile, onSave, onSkip }) {
-  const [step, setStep] = useState(0);
-  const [location, setLocation] = useState(profile.location || "");
-  const [occupationQuery, setOccupationQuery] = useState(profile.targetTitle || "");
-  const [occupation, setOccupation] = useState(profile.targetTitle || "");
-  const [distance, setDistance] = useState(profile.searchRadiusKm || "50");
-  const [saving, setSaving] = useState(false);
-  const occMatches = useMemo(() => {
-    const q = occupationQuery.trim().toLowerCase();
-    if (!q) return OCCUPATION_OPTIONS.slice(0, 8);
-    return OCCUPATION_OPTIONS.filter((o) => o.toLowerCase().includes(q)).slice(0, 10);
-  }, [occupationQuery]);
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({
+    name: profile?.name || "",
+    occupation: profile?.occupation || "",
+    location: profile?.location || "",
+  });
 
-  async function complete() {
-    setSaving(true);
-    await onSave({
-      location,
-      targetLocation: location,
-      targetTitle: occupation || occupationQuery,
-      searchRadiusKm: distance,
-      onboardingCompletedAt: new Date().toISOString(),
-    });
-    setSaving(false);
-  }
+  const handleNext = () => {
+    if (step < 3) setStep(step + 1);
+  };
+
+  const handleBack = () => {
+    if (step > 1) setStep(step - 1);
+  };
+
+  const handleFinish = () => {
+    onSave(formData);
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#EEEDF8", padding: "26px 18px" }}>
-      <div style={{ maxWidth: 540, margin: "0 auto", background: "#fff", border: `1px solid ${T.border}`, borderRadius: 18, boxShadow: "0 18px 34px rgba(15,23,42,0.08)", overflow: "hidden" }}>
-        <div style={{ padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: T.text }}>Quick Setup</div>
-            <div style={{ fontSize: 12, color: T.textSub }}>{step + 1}/3</div>
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: `linear-gradient(135deg, ${T.primaryLight} 0%, ${T.bg} 100%)`,
+      padding: 20,
+      fontFamily: "'Inter', system-ui, sans-serif",
+    }}>
+      <div style={{
+        width: "100%",
+        maxWidth: 600,
+        background: T.surface,
+        borderRadius: 20,
+        padding: 48,
+        boxShadow: T.shadowXl,
+      }}>
+        <div style={{ marginBottom: 32 }}>
+          <div style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 24,
+          }}>
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                style={{
+                  flex: 1,
+                  height: 4,
+                  borderRadius: 2,
+                  background: s <= step ? T.primary : T.border,
+                  transition: "all 0.3s",
+                }}
+              />
+            ))}
           </div>
-          <div style={{ height: 4, background: "#EEF2FF", borderRadius: 99, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${((step + 1) / 3) * 100}%`, background: T.primary }} />
-          </div>
+
+          <h2 style={{
+            fontSize: 28,
+            fontWeight: 700,
+            color: T.text,
+            marginBottom: 8,
+          }}>
+            {step === 1 && "Welcome! Let's get started"}
+            {step === 2 && "What do you do?"}
+            {step === 3 && "Where are you based?"}
+          </h2>
+          <p style={{
+            fontSize: 15,
+            color: T.textSub,
+          }}>
+            {step === 1 && "Help us personalize your experience"}
+            {step === 2 && "This helps us find relevant opportunities"}
+            {step === 3 && "We'll show you jobs in your area"}
+          </p>
         </div>
 
-        <div style={{ padding: 20 }}>
-          {step === 0 && (
-            <>
-              <div style={{ fontSize: 20, fontWeight: 750, color: T.text, marginBottom: 6 }}>Your location</div>
-              <div style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>Pick where you want to work. Type to search like Maps.</div>
-              <LocationAutocomplete value={location} onChange={setLocation} placeholder="Search city, state, country" />
-            </>
-          )}
-
+        <div style={{ marginBottom: 32 }}>
           {step === 1 && (
-            <>
-              <div style={{ fontSize: 20, fontWeight: 750, color: T.text, marginBottom: 6 }}>Your occupation</div>
-              <div style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>Start typing and select a matching role.</div>
-              <AppInput value={occupationQuery} onChange={setOccupationQuery} placeholder="Search occupation" />
-              <div style={{ marginTop: 10, border: `1px solid ${T.border}`, borderRadius: 10, maxHeight: 200, overflowY: "auto" }}>
-                {occMatches.map((o) => (
-                  <button key={o} type="button" onClick={() => { setOccupation(o); setOccupationQuery(o); }} style={{ width: "100%", textAlign: "left", border: "none", borderBottom: `1px solid ${T.border}`, background: occupation === o ? T.primaryLight : "#fff", padding: "10px 12px", cursor: "pointer", color: T.text, fontSize: 13 }}>
-                    {o}
-                  </button>
-                ))}
-              </div>
-            </>
+            <div>
+              <label style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: T.text,
+                marginBottom: 8,
+              }}>
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="John Doe"
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  fontSize: 15,
+                }}
+              />
+            </div>
           )}
 
           {step === 2 && (
-            <>
-              <div style={{ fontSize: 20, fontWeight: 750, color: T.text, marginBottom: 6 }}>Match distance</div>
-              <div style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>How far should potential matches be?</div>
-              <div style={{ display: "grid", gap: 8 }}>
-                {["30", "50", "100", "200", "any"].map((km) => (
-                  <button key={km} type="button" onClick={() => setDistance(km)} style={{ textAlign: "left", border: `1px solid ${distance === km ? T.primaryMid : T.border}`, borderRadius: 10, background: distance === km ? T.primaryLight : "#fff", padding: "10px 12px", cursor: "pointer", fontSize: 13, color: T.text }}>
-                    {km === "any" ? "Doesn't matter" : `${km} km`}
-                  </button>
+            <div>
+              <label style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: T.text,
+                marginBottom: 8,
+              }}>
+                Occupation
+              </label>
+              <select
+                value={formData.occupation}
+                onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  fontSize: 15,
+                  background: T.surface,
+                }}
+              >
+                <option value="">Select your role</option>
+                {OCCUPATION_OPTIONS.map((occ) => (
+                  <option key={occ} value={occ}>
+                    {occ}
+                  </option>
                 ))}
-              </div>
-            </>
+              </select>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <label style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: T.text,
+                marginBottom: 8,
+              }}>
+                Preferred Location
+              </label>
+              <select
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  fontSize: 15,
+                  background: T.surface,
+                }}
+              >
+                <option value="">Select location</option>
+                {LOCATION_OPTIONS.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
 
-        <div style={{ padding: 20, borderTop: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <Btn variant="ghost" onClick={onSkip}>Skip</Btn>
-          <div style={{ display: "flex", gap: 8 }}>
-            {step > 0 && <Btn variant="ghost" onClick={() => setStep((s) => s - 1)}>Back</Btn>}
-            {step < 2 ? (
-              <Btn onClick={() => setStep((s) => s + 1)} disabled={step === 0 && !location}>
-                Continue
-              </Btn>
-            ) : (
-              <Btn onClick={complete} disabled={saving || !location || !(occupation || occupationQuery)}>
-                {saving ? <><Spinner color="#fff" /> Saving…</> : "Finish setup"}
-              </Btn>
+        <div style={{
+          display: "flex",
+          gap: 12,
+          justifyContent: "space-between",
+        }}>
+          <button
+            onClick={onSkip}
+            style={{
+              padding: "12px 24px",
+              borderRadius: 10,
+              border: `1px solid ${T.border}`,
+              background: "transparent",
+              color: T.textSub,
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Skip
+          </button>
+
+          <div style={{ display: "flex", gap: 12 }}>
+            {step > 1 && (
+              <button
+                onClick={handleBack}
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  background: "transparent",
+                  color: T.text,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Back
+              </button>
             )}
+
+            <button
+              onClick={step === 3 ? handleFinish : handleNext}
+              style={{
+                padding: "12px 32px",
+                borderRadius: 10,
+                border: "none",
+                background: T.primary,
+                color: "#FFFFFF",
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {step === 3 ? "Finish" : "Next"}
+            </button>
           </div>
         </div>
       </div>
@@ -864,790 +812,865 @@ function OnboardingFlow({ profile, onSave, onSkip }) {
   );
 }
 
-function Toggle({checked,onChange,label}){
-  return <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none"}}>
-    <div onClick={()=>onChange(!checked)} style={{width:36,height:20,borderRadius:10,background:checked?T.primary:T.border,position:"relative",transition:"background 0.2s",flexShrink:0}}>
-      <div style={{position:"absolute",top:3,left:checked?18:3,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
-    </div>
-    <span style={{fontSize:13,color:T.textSub,fontWeight:500}}>{label}</span>
-  </label>;
-}
-
-function FileUpBtn({onText,label="Upload .txt/.pdf"}){
-  const ref=useRef(); const [loading,setLoading]=useState(false);
-  async function handle(e){
-    const file=e.target.files[0]; if(!file)return; setLoading(true);
-    try{
-      if(file.type==="application/pdf"){
-        const supabase = getSupabaseClient();
-        const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-        const { data: d, error } = await supabase.functions.invoke("anthropic-proxy", {
-          body: {
-            model: "claude-sonnet-4-20250514",
-            maxTokens: 3000,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } },
-                { type: "text", text: "Extract and return only the full plain text. No commentary." },
-              ],
-            }],
-          },
-        });
-        if (error) throw error;
-        if (d?.error) throw new Error(d.error);
-        onText(d.content?.map(b=>b.text||"").join("")||"",file.name);
-      }else{onText(await file.text(),file.name);}
-    }catch(err){alert(err?.message || "Could not read file.");}
-    setLoading(false); e.target.value="";
-  }
-  return <><input ref={ref} type="file" accept=".txt,.pdf" onChange={handle} style={{display:"none"}}/>
-    <Btn onClick={()=>ref.current?.click()} variant="ghost" small disabled={loading}>
-      {loading?<><Spinner/> Reading…</>:<>📎 {label}</>}
-    </Btn></>;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// PROFILE VIEW
+// JOB SEARCH VIEW - IMPROVED UI/UX
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProfileView({docs,setDocs,profile,setProfileState}){
-  const [savedMsg,setSavedMsg]=useState("");
-  const [profileError,setProfileError]=useState("");
-  const [savingProfile,setSavingProfile]=useState(false);
-  const [savingDoc,setSavingDoc]=useState(false);
-  const [docError,setDocError]=useState("");
-  const [showDocForm,setShowDocForm]=useState(false);
-  const [docType,setDocType]=useState("resume");
-  const [docTag,setDocTag]=useState("");
-  const [docContent,setDocContent]=useState("");
-  const [editDocId,setEditDocId]=useState(null);
+function JobSearchView({ jobs, setJobs }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  function up(k,v){setProfileState((p)=>({...p,[k]:v}));}
-  async function save(){
-    setSavingProfile(true);
-    setProfileError("");
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+
+    setLoading(true);
+    setError("");
+    setResults([]);
+
     try {
-      const savedProfile = await store.setProfile(profile);
-      if (savedProfile) {
-        setProfileState((prev) => ({ ...prev, ...savedProfile }));
+      const searchResults = await searchJobsByKeyword(query);
+      setResults(searchResults);
+      if (searchResults.length === 0) {
+        setError("No jobs found. Try a different search term.");
       }
-      setSavedMsg("Saved!");
-      setTimeout(()=>setSavedMsg(""),2000);
-    } catch(e){
-      setProfileError(`Error saving profile: ${e.message}`);
+    } catch (err) {
+      setError(err.message || "Failed to search jobs. Please try again.");
     } finally {
-      setSavingProfile(false);
+      setLoading(false);
     }
-  }
+  };
 
-  async function saveDoc(){
-    if(!docContent.trim()||!docTag.trim())return;
-    setSavingDoc(true);
-    setDocError("");
-    try {
-      if(editDocId){
-        const updated = await store.updateDoc(editDocId,{tag:docTag,content:docContent,type:docType});
-        setDocs(prev=>prev.map(d=>d.id===editDocId?updated:d));
-      } else {
-        const newDoc = await store.insertDoc({type:docType,tag:docTag,content:docContent});
-        setDocs(prev=>[newDoc,...prev]);
-      }
-      setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocType("resume");
-    } catch(e){
-      setDocError(`Error saving document: ${e.message}`);
-    } finally {
-      setSavingDoc(false);
-    }
-  }
-  function startEdit(doc){setEditDocId(doc.id);setDocType(doc.type);setDocTag(doc.tag);setDocContent(doc.content);setShowDocForm(true);}
-  async function delDoc(id){
-    setDocError("");
-    try {
-      await store.deleteDoc(id);
-      setDocs(prev=>prev.filter(d=>d.id!==id));
-    } catch(e){
-      setDocError(`Error deleting document: ${e.message}`);
-    }
-  }
-  function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocError("");}
-  const titleOptions = TITLE_OPTIONS.includes(profile.targetTitle)
-    ? TITLE_OPTIONS
-    : profile.targetTitle
-      ? [profile.targetTitle, ...TITLE_OPTIONS]
-      : TITLE_OPTIONS;
+  const handleSaveJob = async (job) => {
+    const newJob = {
+      id: crypto.randomUUID(),
+      ...job,
+      status: "saved",
+      notes: "",
+      created_at: new Date().toISOString(),
+    };
 
-  const renderField=(lbl,k,ph,type="text")=>(
-    <div style={{marginBottom:14}}>
-      <FL>{lbl}</FL>
-      <AppInput value={profile[k]||""} onChange={v=>up(k,v)} placeholder={ph} type={type}/>
-    </div>
-  );
-  const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
+    const updatedJobs = [newJob, ...jobs];
+    setJobs(updatedJobs);
+    await store.setJobs(updatedJobs);
 
-  return(
-    <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <div style={{padding:"28px 32px",maxWidth:920,margin:"0 auto"}}>
-        <div style={{marginBottom:22}}>
-          <h1 style={{margin:0,fontSize:21,fontWeight:800,color:T.text,letterSpacing:"-0.3px"}}>Profile</h1>
-          <p style={{margin:"4px 0 0",fontSize:13,color:T.textSub}}>Personal info, job preferences, and documents</p>
+    setResults(results.filter((r) => r !== job));
+  };
+
+  return (
+    <div style={{
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+      padding: "32px 40px",
+      overflow: "auto",
+    }}>
+      <div style={{ maxWidth: 1000, width: "100%", margin: "0 auto" }}>
+        <div style={{ marginBottom: 32 }}>
+          <h1 style={{
+            fontSize: 32,
+            fontWeight: 700,
+            color: T.text,
+            marginBottom: 8,
+          }}>
+            Find Your Next Role
+          </h1>
+          <p style={{
+            fontSize: 15,
+            color: T.textSub,
+          }}>
+            Search thousands of job listings and save the ones you like
+          </p>
         </div>
 
-        {profileError&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}>{profileError}</div>}
-
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:18,marginBottom:18}}>
-          <Card>
-            <SH icon="👤" title="Personal Info"/>
-            {renderField("Full Name","name","Jane Smith")}
-            {renderField("Email","email","jane@example.com","email")}
-            {renderField("LinkedIn URL","linkedin","https://linkedin.com/in/jane")}
-            <div style={{marginBottom:14}}>
-              <FL>Location</FL>
-              <LocationAutocomplete
-                value={profile.location || ""}
-                onChange={(v)=>up("location",v)}
-                placeholder="Search location"
+        <form onSubmit={handleSearch} style={{ marginBottom: 32 }}>
+          <div style={{
+            display: "flex",
+            gap: 12,
+            padding: 16,
+            background: T.surface,
+            borderRadius: 14,
+            border: `1px solid ${T.border}`,
+            boxShadow: T.shadow,
+          }}>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 20, color: T.textMute }}>🔍</span>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by title, company, or keywords..."
+                style={{
+                  flex: 1,
+                  border: "none",
+                  outline: "none",
+                  fontSize: 15,
+                  color: T.text,
+                  background: "transparent",
+                }}
               />
             </div>
-            {renderField("Phone","phone","+1 (555) 000-0000","tel")}
-          </Card>
-          <Card>
-            <SH icon="🎯" title="Job Preferences"/>
-            <div style={{marginBottom:14}}>
-              <FL>Target Job Title</FL>
-              <Sel
-                value={profile.targetTitle || ""}
-                onChange={(v)=>up("targetTitle",v)}
-                options={[
-                  { value: "", label: "Select target title" },
-                  ...titleOptions.map((opt)=>({ value: opt, label: opt })),
-                ]}
-              />
-            </div>
-            {renderField("Preferred Location(s)","targetLocation","Remote, NYC, London")}
-            {renderField("Seniority Level","seniority","Senior, Mid-level, Entry")}
-            {renderField("Industries","industry","SaaS, Fintech, Healthcare")}
-            <div style={{marginBottom:14}}><FL>Keywords to Highlight</FL>
-              <TA value={profile.keywords||""} onChange={v=>up("keywords",v)} placeholder="agile, roadmap, SQL..." rows={2}/>
-            </div>
-          </Card>
-        </div>
-
-        <Card style={{marginBottom:18}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
-            <SH icon="🏢" title="Company & Culture Preferences"/>
-            <Toggle checked={!!profile.useCompanyPrefs} onChange={v=>up("useCompanyPrefs",v)}
-              label={profile.useCompanyPrefs?"Applied to search":"Off"}/>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14}}>
-            <div><FL>Target Companies</FL>
-              <TA value={profile.targetCompanies||""} onChange={v=>up("targetCompanies",v)}
-                placeholder="e.g. Stripe, Notion, Series B startups..." rows={3}/>
-            </div>
-            <div><FL>Lifestyle & Culture Vibe</FL>
-              <TA value={profile.lifestyleVibe||""} onChange={v=>up("lifestyleVibe",v)}
-                placeholder="e.g. async-first, flat hierarchy, mission-driven..." rows={3}/>
-            </div>
-          </div>
-          {!profile.useCompanyPrefs&&<div style={{marginTop:10,fontSize:12,color:T.textMute,background:T.bg,borderRadius:8,padding:"8px 12px",border:`1px solid ${T.border}`}}>💡 Toggle on to include these preferences in searches and suggestions.</div>}
-        </Card>
-
-        <div style={{marginBottom:24}}>
-          <Btn onClick={save} variant={savedMsg?"success":"primary"} disabled={savingProfile}>
-            {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save All Preferences"}
-          </Btn>
-        </div>
-
-        <Card>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <SH icon="📄" title="My Documents"/>
-            <Btn onClick={()=>{setShowDocForm(v=>!v);if(showDocForm)cancelDoc();}} variant="secondary" small>{showDocForm?"Cancel":"+ Add Document"}</Btn>
-          </div>
-
-          {docError&&<div style={{fontSize:12,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"8px 12px",marginBottom:12}}>{docError}</div>}
-
-          {showDocForm&&(
-            <div style={{background:T.primaryLight,border:`1px solid ${T.primaryMid}`,borderRadius:10,padding:16,marginBottom:16}}>
-              <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"flex-end"}}>
-                <div style={{minWidth:170}}><FL>Type</FL>
-                  <Sel value={docType} onChange={setDocType} options={[{value:"resume",label:"Resume / CV"},{value:"cover_letter",label:"Cover Letter"}]} style={{width:"100%"}}/>
-                </div>
-                <div style={{flex:1,minWidth:180}}><FL>Label</FL><AppInput value={docTag} onChange={setDocTag} placeholder="e.g. Tech Resume"/></div>
-                <FileUpBtn onText={(text,fn)=>{setDocContent(text);if(!docTag)setDocTag(fn.replace(/\.[^.]+$/,""));}}/>
-              </div>
-              <FL>Document Text</FL>
-              <TA value={docContent} onChange={setDocContent} placeholder="Paste text here..." rows={8}/>
-              <div style={{marginTop:12,display:"flex",gap:8}}>
-                <Btn onClick={saveDoc} disabled={savingDoc}>
-                  {savingDoc ? <><Spinner color="#fff"/> Saving…</> : editDocId?"Update":"Save Document"}
-                </Btn>
-                <Btn onClick={cancelDoc} variant="ghost" disabled={savingDoc}>Cancel</Btn>
-              </div>
-            </div>
-          )}
-
-          {[{list:resumes,icon:"📋",label:"Resumes & CVs"},{list:covers,icon:"✉️",label:"Cover Letters"}].map(({list,icon,label})=>(
-            <div key={label} style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.textSub,marginBottom:8}}>{icon} {label} <span style={{fontWeight:400,color:T.textMute}}>({list.length})</span></div>
-              {list.length===0?<div style={{fontSize:13,color:T.textMute}}>None yet.</div>
-                :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-                  {list.map(doc=>(
-                    <div key={doc.id} style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{doc.tag}</div>
-                        <div style={{display:"flex",gap:4}}><Btn onClick={()=>startEdit(doc)} variant="ghost" small>Edit</Btn><Btn onClick={()=>delDoc(doc.id)} variant="danger" small>✕</Btn></div>
-                      </div>
-                      <div style={{fontSize:11,color:T.textMute,lineHeight:1.5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{doc.content.slice(0,120)}…</div>
-                      <div style={{fontSize:10,color:T.textMute,marginTop:6}}>{formatDate(doc.createdAt || doc.created_at)}</div>
-                    </div>
-                  ))}
-                </div>}
-            </div>
-          ))}
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SUGGESTED ROLES VIEW
-// ═══════════════════════════════════════════════════════════════════════════════
-function SuggestedView(){
-  return(
-    <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Suggested Jobs" subtitle="Coming soon"/>
-      <div style={{padding:"18px 32px 30px",maxWidth:980,margin:"0 auto"}}>
-        <Card style={{opacity:0.6, borderStyle:"dashed"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontSize:16,fontWeight:750,color:T.text}}>Suggested Jobs</div>
-            <span style={{fontSize:11,fontWeight:700,padding:"4px 8px",borderRadius:999,border:`1px solid ${T.border}`,color:T.textSub}}>Coming Soon</span>
-          </div>
-          <div style={{fontSize:13,color:T.textSub,lineHeight:1.7}}>
-            This section is intentionally disabled while we stabilize job board search and tailoring quality.
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// JOB SEARCH VIEW
-// ═══════════════════════════════════════════════════════════════════════════════
-function SearchView({jobs,setJobs,profile}){
-  const [query,setQuery]=useState("");
-  const [searchLocation,setSearchLocation]=useState(profile?.targetLocation || profile?.location || "");
-  const [remoteOnly,setRemoteOnly]=useState(false);
-  const [datePosted,setDatePosted]=useState("all");
-  const [results,setResults]=useState([]);
-  const [selectedJobIdx,setSelectedJobIdx]=useState(0);
-  const [loading,setLoading]=useState(false);
-  const [error,setError]=useState("");
-  const [savingJobKey,setSavingJobKey]=useState("");
-  const profileTitle = (profile?.targetTitle || "").trim();
-  const profileKeywords = (profile?.keywords || "").trim();
-  const profileCompanies = (profile?.targetCompanies || "").trim();
-  const savedJobKeys = useMemo(
-    () => new Set(jobs.map((j) => `${j.title || ""}::${j.company || ""}`)),
-    [jobs]
-  );
-  const selectedJob = results[selectedJobIdx] || null;
-
-  useEffect(() => {
-    if (!query && profileTitle) {
-      setQuery(profileTitle);
-    }
-  }, [query, profileTitle]);
-
-  useEffect(() => {
-    if (!searchLocation && (profile?.targetLocation || profile?.location)) {
-      setSearchLocation(profile.targetLocation || profile.location);
-    }
-  }, [profile, searchLocation]);
-
-  async function search(){
-    const baseQuery = query.trim() || profileTitle;
-    if(!baseQuery){
-      setError("Enter a keyword or set a target title in Profile.");
-      return;
-    }
-    const parts = [baseQuery];
-    if (searchLocation?.trim()) parts.push(searchLocation.trim());
-    if (remoteOnly) parts.push("remote");
-    if (datePosted !== "all") parts.push(`posted ${datePosted}`);
-    if (profileKeywords) parts.push(profileKeywords);
-    if (profile?.useCompanyPrefs && profileCompanies) parts.push(profileCompanies);
-    const finalQuery = parts.join(", ");
-
-    setLoading(true);setError("");setResults([]);
-    try{
-      const jobsFromApi = await searchJobsByKeyword(finalQuery);
-      setResults(jobsFromApi);
-      setSelectedJobIdx(0);
-    }catch(e){setError(e?.message || "Search failed. Check job board API setup.");}
-    setLoading(false);
-  }
-
-  async function saveJob(job){
-    if(savedJobKeys.has(`${job.title || ""}::${job.company || ""}`))return;
-    const jobKey = `${job.title}::${job.company}`;
-    setSavingJobKey(jobKey);
-    try{
-      const saved=await store.insertJob({
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        description: job.description,
-        url: job.apply_url,
-        status:"saved",
-        notes:"",
-      });
-      setJobs(prev=>[saved,...prev]);
-    }catch(e){setError(`Error saving job: ${e.message}`);}
-    finally{setSavingJobKey("");}
-  }
-
-  return(
-    <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Job Search" subtitle="LinkedIn-style search flow: search, filter, pick a role, then save."/>
-      <div style={{padding:"16px 24px 24px",maxWidth:1240,margin:"0 auto"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr auto",gap:10,marginBottom:10}}>
-          <AppInput value={query} onChange={setQuery} placeholder='e.g. customer success, account manager, frontend engineer'
-            onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
-          <LocationAutocomplete value={searchLocation} onChange={setSearchLocation} placeholder="Location" compact />
-          <Btn onClick={search} disabled={loading} style={{height:40,padding:"0 20px"}}>
-            {loading?<><Spinner color="#fff"/> Searching…</>:"Search"}
-          </Btn>
-        </div>
-
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
-          <button onClick={()=>setRemoteOnly(v=>!v)} style={{
-            border:`1px solid ${remoteOnly ? "#0F766E" : T.border}`,
-            background:remoteOnly ? "#0F766E" : "#fff",
-            color:remoteOnly ? "#fff" : T.text,
-            borderRadius:999,padding:"7px 14px",fontSize:13,fontWeight:700,cursor:"pointer"
-          }}>Remote {remoteOnly ? "✓" : ""}</button>
-          <Sel value={datePosted} onChange={setDatePosted} options={[
-            { value: "all", label: "Date posted: Any time" },
-            { value: "past 24 hours", label: "Past 24 hours" },
-            { value: "past week", label: "Past week" },
-            { value: "past month", label: "Past month" },
-          ]} style={{width:220,padding:"8px 12px",fontSize:13}} />
-          {(profileTitle || profile?.location) && (
-            <span style={{fontSize:12,color:T.textSub}}>Using profile defaults: {profileTitle || "title not set"}{profile?.location ? ` · ${profile.location}` : ""}</span>
-          )}
-        </div>
-
-        {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:12}}>{error}</div>}
-
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1.2fr",gap:12,minHeight:520}}>
-          <Card style={{padding:0,overflow:"hidden"}}>
-            <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,background:"#1865B7",color:"#fff"}}>
-              <div style={{fontSize:14,fontWeight:700}}>{query || profileTitle || "Search"} in {searchLocation || "Any location"}</div>
-              <div style={{fontSize:12,opacity:0.9}}>{results.length} result{results.length===1?"":"s"}</div>
-            </div>
-            <div style={{maxHeight:560,overflowY:"auto"}}>
-              {results.length===0 && (
-                <div style={{padding:20,fontSize:13,color:T.textSub}}>Run a search to see job matches.</div>
+            <button
+              type="submit"
+              disabled={loading || !query.trim()}
+              style={{
+                padding: "12px 28px",
+                borderRadius: 10,
+                border: "none",
+                background: loading || !query.trim() ? T.textMute : T.primary,
+                color: "#FFFFFF",
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: loading || !query.trim() ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {loading ? (
+                <>
+                  <Spinner size={16} />
+                  Searching...
+                </>
+              ) : (
+                "Search Jobs"
               )}
-              {results.map((job,i)=>{
-                const active = i === selectedJobIdx;
-                return (
-                  <button key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`} type="button" onClick={()=>setSelectedJobIdx(i)} style={{
-                    display:"block",width:"100%",textAlign:"left",border:"none",borderBottom:`1px solid ${T.border}`,padding:"12px 14px",
-                    background:active ? "#EEF4FF" : "#fff",cursor:"pointer"
+            </button>
+          </div>
+        </form>
+
+        {error && (
+          <div style={{
+            padding: 16,
+            borderRadius: 12,
+            background: T.redBg,
+            border: `1px solid ${T.redBorder}`,
+            color: T.red,
+            fontSize: 14,
+            marginBottom: 24,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {results.length > 0 && (
+          <div>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 20,
+            }}>
+              <h2 style={{
+                fontSize: 20,
+                fontWeight: 600,
+                color: T.text,
+              }}>
+                {results.length} Results Found
+              </h2>
+            </div>
+
+            <div style={{ display: "grid", gap: 16 }}>
+              {results.map((job, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: T.surface,
+                    borderRadius: 14,
+                    padding: 24,
+                    border: `1px solid ${T.border}`,
+                    boxShadow: T.shadow,
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = T.shadowLg;
+                    e.currentTarget.style.borderColor = T.primary;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = T.shadow;
+                    e.currentTarget.style.borderColor = T.border;
+                  }}
+                >
+                  <div style={{ marginBottom: 16 }}>
+                    <h3 style={{
+                      fontSize: 18,
+                      fontWeight: 600,
+                      color: T.text,
+                      marginBottom: 6,
+                    }}>
+                      {job.title}
+                    </h3>
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      fontSize: 14,
+                      color: T.textSub,
+                    }}>
+                      <span style={{ fontWeight: 600 }}>{job.company}</span>
+                      <span>•</span>
+                      <span>{job.location}</span>
+                    </div>
+                  </div>
+
+                  {job.description && (
+                    <p style={{
+                      fontSize: 14,
+                      color: T.textSub,
+                      lineHeight: 1.6,
+                      marginBottom: 16,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}>
+                      {job.description}
+                    </p>
+                  )}
+
+                  <div style={{
+                    display: "flex",
+                    gap: 12,
+                    flexWrap: "wrap",
                   }}>
-                    <div style={{fontSize:16,fontWeight:750,color:active?T.primary:T.text,marginBottom:3}}>{job.title}</div>
-                    <div style={{fontSize:13,color:T.text,fontWeight:650}}>{job.company}</div>
-                    <div style={{fontSize:12,color:T.textSub,marginTop:2}}>{job.location}</div>
+                    <button
+                      onClick={() => handleSaveJob(job)}
+                      style={{
+                        padding: "10px 20px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: T.primary,
+                        color: "#FFFFFF",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      💾 Save Job
+                    </button>
+                    {job.apply_url && (
+                      <a
+                        href={job.apply_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "10px 20px",
+                          borderRadius: 8,
+                          border: `1px solid ${T.border}`,
+                          background: "transparent",
+                          color: T.text,
+                          fontSize: 14,
+                          fontWeight: 600,
+                          textDecoration: "none",
+                          display: "inline-block",
+                        }}
+                      >
+                        🔗 View Job
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!loading && results.length === 0 && !error && (
+          <div style={{
+            textAlign: "center",
+            padding: "80px 20px",
+            color: T.textMute,
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+            <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              Start your job search
+            </p>
+            <p style={{ fontSize: 14 }}>
+              Enter keywords, job titles, or company names above
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SAVED JOBS VIEW - IMPROVED UI/UX
+// ═══════════════════════════════════════════════════════════════════════════════
+function SavedJobsView({ jobs, setJobs }) {
+  const [filter, setFilter] = useState("all");
+  const [selectedJob, setSelectedJob] = useState(null);
+
+  const filteredJobs = useMemo(() => {
+    if (filter === "all") return jobs;
+    return jobs.filter((j) => j.status === filter);
+  }, [jobs, filter]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { all: jobs.length };
+    STATUS_OPTIONS.forEach((status) => {
+      counts[status] = jobs.filter((j) => j.status === status).length;
+    });
+    return counts;
+  }, [jobs]);
+
+  const handleStatusChange = async (jobId, newStatus) => {
+    const updatedJobs = jobs.map((j) =>
+      j.id === jobId ? { ...j, status: newStatus } : j
+    );
+    setJobs(updatedJobs);
+    await store.setJobs(updatedJobs);
+    if (selectedJob?.id === jobId) {
+      setSelectedJob({ ...selectedJob, status: newStatus });
+    }
+  };
+
+  const handleUpdateNotes = async (jobId, notes) => {
+    const updatedJobs = jobs.map((j) =>
+      j.id === jobId ? { ...j, notes } : j
+    );
+    setJobs(updatedJobs);
+    await store.setJobs(updatedJobs);
+  };
+
+  const handleDeleteJob = async (jobId) => {
+    const updatedJobs = jobs.filter((j) => j.id !== jobId);
+    setJobs(updatedJobs);
+    await store.setJobs(updatedJobs);
+    if (selectedJob?.id === jobId) {
+      setSelectedJob(null);
+    }
+  };
+
+  return (
+    <div style={{
+      height: "100%",
+      display: "flex",
+      overflow: "hidden",
+    }}>
+      {/* Left Sidebar - Filters */}
+      <div style={{
+        width: 280,
+        borderRight: `1px solid ${T.border}`,
+        background: T.surface,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "auto",
+      }}>
+        <div style={{ padding: "24px 20px" }}>
+          <h2 style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color: T.text,
+            marginBottom: 16,
+          }}>
+            Filter by Status
+          </h2>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <button
+              onClick={() => setFilter("all")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "none",
+                background: filter === "all" ? T.primaryLight : "transparent",
+                color: filter === "all" ? T.primary : T.text,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <span>All Jobs</span>
+              <Badge color={T.textMute} bg={T.bg} border={T.border}>
+                {statusCounts.all}
+              </Badge>
+            </button>
+
+            {STATUS_OPTIONS.map((status) => {
+              const meta = STATUS_META[status];
+              return (
+                <button
+                  key={status}
+                  onClick={() => setFilter(status)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: filter === status ? meta.bg : "transparent",
+                    color: filter === status ? meta.color : T.text,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>{meta.label}</span>
+                  <Badge color={meta.color} bg={meta.bg} border={meta.border}>
+                    {statusCounts[status] || 0}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Middle - Job List */}
+      <div style={{
+        width: 400,
+        borderRight: `1px solid ${T.border}`,
+        background: T.bg,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "auto",
+      }}>
+        <div style={{
+          padding: "20px",
+          borderBottom: `1px solid ${T.border}`,
+          background: T.surface,
+        }}>
+          <h2 style={{
+            fontSize: 20,
+            fontWeight: 700,
+            color: T.text,
+          }}>
+            {filter === "all" ? "All Jobs" : STATUS_META[filter]?.label}
+            <span style={{
+              marginLeft: 8,
+              fontSize: 16,
+              color: T.textMute,
+              fontWeight: 500,
+            }}>
+              ({filteredJobs.length})
+            </span>
+          </h2>
+        </div>
+
+        <div style={{ flex: 1, overflow: "auto" }}>
+          {filteredJobs.length === 0 ? (
+            <div style={{
+              padding: 40,
+              textAlign: "center",
+              color: T.textMute,
+            }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
+              <p style={{ fontSize: 14 }}>No jobs found</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {filteredJobs.map((job) => {
+                const meta = STATUS_META[job.status];
+                const isSelected = selectedJob?.id === job.id;
+
+                return (
+                  <button
+                    key={job.id}
+                    onClick={() => setSelectedJob(job)}
+                    style={{
+                      padding: 20,
+                      border: "none",
+                      borderBottom: `1px solid ${T.border}`,
+                      background: isSelected ? T.surface : "transparent",
+                      borderLeft: isSelected ? `3px solid ${meta.color}` : "3px solid transparent",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all 0.2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) e.currentTarget.style.background = T.surface;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    <div style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      marginBottom: 8,
+                    }}>
+                      <h3 style={{
+                        fontSize: 15,
+                        fontWeight: 600,
+                        color: T.text,
+                        flex: 1,
+                      }}>
+                        {job.title}
+                      </h3>
+                      <Badge color={meta.color} bg={meta.bg} border={meta.border}>
+                        {meta.label}
+                      </Badge>
+                    </div>
+                    <div style={{
+                      fontSize: 13,
+                      color: T.textSub,
+                      marginBottom: 4,
+                    }}>
+                      {job.company}
+                    </div>
+                    <div style={{
+                      fontSize: 13,
+                      color: T.textMute,
+                    }}>
+                      {job.location}
+                    </div>
                   </button>
                 );
               })}
             </div>
-          </Card>
+          )}
+        </div>
+      </div>
 
-          <Card style={{padding:18}}>
-            {!selectedJob && (
-              <div style={{fontSize:14,color:T.textSub}}>Select a job to preview details.</div>
+      {/* Right - Job Detail */}
+      <div style={{
+        flex: 1,
+        background: T.surface,
+        overflow: "auto",
+      }}>
+        {selectedJob ? (
+          <div style={{ padding: 32 }}>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}>
+                <div style={{ flex: 1 }}>
+                  <h1 style={{
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: T.text,
+                    marginBottom: 8,
+                  }}>
+                    {selectedJob.title}
+                  </h1>
+                  <div style={{
+                    fontSize: 16,
+                    color: T.textSub,
+                    marginBottom: 4,
+                  }}>
+                    <strong>{selectedJob.company}</strong>
+                  </div>
+                  <div style={{
+                    fontSize: 14,
+                    color: T.textMute,
+                  }}>
+                    📍 {selectedJob.location}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDeleteJob(selectedJob.id)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: `1px solid ${T.redBorder}`,
+                    background: T.redBg,
+                    color: T.red,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  🗑️ Delete
+                </button>
+              </div>
+
+              {selectedJob.apply_url && (
+                <a
+                  href={selectedJob.apply_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "10px 20px",
+                    borderRadius: 8,
+                    background: T.primary,
+                    color: "#FFFFFF",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    textDecoration: "none",
+                  }}
+                >
+                  🔗 View Original Posting
+                </a>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: T.text,
+                marginBottom: 8,
+              }}>
+                Status
+              </label>
+              <select
+                value={selectedJob.status}
+                onChange={(e) => handleStatusChange(selectedJob.id, e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: 8,
+                  border: `1px solid ${T.border}`,
+                  fontSize: 14,
+                  background: T.surface,
+                }}
+              >
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_META[status].label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedJob.description && (
+              <div style={{ marginBottom: 24 }}>
+                <h3 style={{
+                  fontSize: 16,
+                  fontWeight: 600,
+                  color: T.text,
+                  marginBottom: 12,
+                }}>
+                  Description
+                </h3>
+                <div style={{
+                  padding: 16,
+                  borderRadius: 8,
+                  background: T.bg,
+                  fontSize: 14,
+                  color: T.textSub,
+                  lineHeight: 1.6,
+                  maxHeight: 300,
+                  overflow: "auto",
+                }}>
+                  {selectedJob.description}
+                </div>
+              </div>
             )}
-            {selectedJob && (() => {
-              const isSaved = savedJobKeys.has(`${selectedJob.title || ""}::${selectedJob.company || ""}`);
-              const jobKey = `${selectedJob.title}::${selectedJob.company}`;
-              const saving = savingJobKey === jobKey;
-              return (
-                <>
-                  <div style={{fontSize:14,color:T.textSub,marginBottom:8}}>{selectedJob.company}</div>
-                  <h2 style={{margin:"0 0 8px",fontSize:42,lineHeight:1.05,color:T.text,letterSpacing:"-0.7px"}}>{selectedJob.title}</h2>
-                  <div style={{fontSize:16,color:T.textSub,marginBottom:12}}>{selectedJob.location}</div>
-                  <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                    <Chip label={remoteOnly ? "Remote" : "Open"} color={T.teal} />
-                    <Chip label={datePosted === "all" ? "Any date" : datePosted} color={T.amber} />
-                    <Chip label={selectedJob.source || "jsearch"} color={T.violet} />
-                  </div>
-                  <div style={{display:"flex",gap:8,marginBottom:14}}>
-                    <Btn onClick={()=>saveJob(selectedJob)} disabled={isSaved || saving} variant={isSaved ? "success" : "secondary"}>
-                      {saving ? <><Spinner/> Saving…</> : isSaved ? "✓ Saved" : "Save"}
-                    </Btn>
-                    {selectedJob.apply_url && (
-                      <a href={selectedJob.apply_url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 16px",border:`1px solid ${T.border}`,borderRadius:10,color:T.text,textDecoration:"none",fontSize:13,fontWeight:650}}>
-                        View Listing
-                      </a>
-                    )}
-                  </div>
-                  <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,maxHeight:300,overflowY:"auto",paddingRight:4}}>
-                    {selectedJob.description || "No description provided by source."}
-                  </div>
-                </>
-              );
-            })()}
-          </Card>
-        </div>
-      </div>
-    </div>
-  );
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRACKER VIEW
-// ═══════════════════════════════════════════════════════════════════════════════
-function TrackerView({jobs,setJobs,docs}){
-  const [filterStatus,setFilterStatus]=useState("all");
-  const [sortBy,setSortBy]=useState("date");
-  const [trackerMsg,setTrackerMsg]=useState("");
-  const [trackerErr,setTrackerErr]=useState("");
-  const [tailorModalJobId,setTailorModalJobId]=useState(null);
-  const [tailorInputs,setTailorInputs]=useState({
-    excitement: "",
-    emphasis: "",
-    avoid: "",
-    resumeId: "",
-    coverId: "",
-  });
-  const [tailorLoading,setTailorLoading]=useState(false);
-  const [quota,setQuota]=useState({ weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null });
-
-  async function updateStatus(id,status){
-    setTrackerErr("");
-    const prev = jobs;
-    const u=jobs.map(j=>j.id===id?{...j,status}:j);
-    setJobs(u);
-    try{
-      await store.updateJob(id,{status});
-    }catch(e){
-      setJobs(prev);
-      setTrackerErr(`Could not update status: ${e.message}`);
-    }
-  }
-  async function saveNotes(id, notesValue){
-    setTrackerErr("");
-    const prev = jobs;
-    const u=jobs.map(j=>j.id===id?{...j,notes:notesValue}:j);
-    setJobs(u);
-    try{
-      await store.updateJob(id,{notes:notesValue});
-      setTrackerMsg("Notes saved.");
-      setTimeout(()=>setTrackerMsg(""),1500);
-    }catch(e){
-      setJobs(prev);
-      setTrackerErr(`Could not save notes: ${e.message}`);
-    }
-  }
-  async function deleteJob(id){
-    setTrackerErr("");
-    const prev = jobs;
-    const u=jobs.filter(j=>j.id!==id);
-    setJobs(u);
-    try{
-      await store.deleteJob(id);
-    }catch(e){
-      setJobs(prev);
-      setTrackerErr(`Could not delete job: ${e.message}`);
-    }
-  }
-
-  useEffect(() => {
-    store.getTailoringQuota()
-      .then((q) => setQuota(q))
-      .catch(() => setTrackerErr("Tailoring limit configuration is missing. Run supabase/tailoring_limits.sql."));
-  }, []);
-
-  const filtered=jobs.filter(j=>filterStatus==="all"||j.status===filterStatus).sort((a,b)=>{
-    if(sortBy==="date"){
-      const bDate = toISO(b.savedAt || b.created_at) || "";
-      const aDate = toISO(a.savedAt || a.created_at) || "";
-      return bDate.localeCompare(aDate);
-    }
-    if(sortBy==="company")return(a.company||"").localeCompare(b.company||"");
-    return(a.title||"").localeCompare(b.title||"");
-  });
-  const counts=STATUS_OPTIONS.reduce((acc,s)=>({...acc,[s]:jobs.filter(j=>j.status===s).length}),{});
-  const resumes = docs.filter((d) => d.type === "resume");
-  const covers = docs.filter((d) => d.type === "cover_letter");
-  const selectedTailorJob = jobs.find((j) => j.id === tailorModalJobId) || null;
-
-  function openTailorModal(job) {
-    setTailorModalJobId(job.id);
-    setTailorInputs({
-      excitement: "",
-      emphasis: "",
-      avoid: "",
-      resumeId: job.resumeDocId || resumes[0]?.id || "",
-      coverId: job.coverDocId || covers[0]?.id || "",
-    });
-    setTrackerErr("");
-  }
-
-  async function generateTailoredApplication() {
-    if (!selectedTailorJob) return;
-    const resume = docs.find((d) => d.id === tailorInputs.resumeId);
-    const cover = docs.find((d) => d.id === tailorInputs.coverId);
-    if (!resume && !cover) {
-      setTrackerErr("Select at least one document.");
-      return;
-    }
-    if (!selectedTailorJob.description?.trim()) {
-      setTrackerErr("This job has no description. Add one from Job Search before tailoring.");
-      return;
-    }
-    if (quota.remaining <= 0) {
-      setTrackerErr("Weekly tailoring limit reached. Please wait for reset.");
-      return;
-    }
-
-    setTailorLoading(true);
-    setTrackerErr("");
-    try {
-      const updatedQuota = await store.consumeTailoringUse(selectedTailorJob.id);
-      setQuota(updatedQuota);
-
-      const raw = await callClaude(
-        "You generate concise, professional, factual application content. Return only JSON with keys: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score.",
-        `Job Description:\n${selectedTailorJob.description}\n\nResume:\n${resume?.content || "(not provided)"}\n\nCover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`
-      );
-      let data;
-      try {
-        data = JSON.parse(raw.replace(/```json|```/g,"").trim());
-      } catch {
-        throw new Error("AI response format error. Please try again.");
-      }
-      const updates = {
-        tailoredResume: data.tailored_resume_summary || "",
-        tailoredCover: data.tailored_cover_letter || "",
-        keywords: Array.isArray(data.keyword_alignment) ? data.keyword_alignment : [],
-        matchScore: Number.isFinite(data.match_score) ? data.match_score : null,
-        resumeDocId: resume?.id || null,
-        coverDocId: cover?.id || null,
-        status: "tailored",
-      };
-      const dbRow = await store.updateJob(selectedTailorJob.id, updates);
-      setJobs((prev) => prev.map((j) => (j.id === selectedTailorJob.id ? { ...j, ...dbRow } : j)));
-      setTrackerMsg("Tailored application generated.");
-      setTimeout(()=>setTrackerMsg(""),2000);
-      setTailorModalJobId(null);
-    } catch (e) {
-      if ((e?.message || "").includes("WEEKLY_LIMIT_REACHED")) {
-        setTrackerErr("You have reached 7 tailored applications for this week.");
-      } else {
-        setTrackerErr(`Tailoring failed: ${e.message || e}`);
-      }
-    } finally {
-      setTailorLoading(false);
-    }
-  }
-
-  return(
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
-      <PH title="Application Tracker" subtitle={`${jobs.length} application${jobs.length!==1?"s":""} tracked`}
-        action={<Btn onClick={()=>exportCSV(jobs,docs)} variant="ghost">↓ Export CSV</Btn>}/>
-
-      <div style={{padding:"14px 32px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0,maxWidth:1180,margin:"0 auto",width:"100%"}}>
-        {[["all",`All (${jobs.length})`],...STATUS_OPTIONS.map(s=>[s,`${STATUS_META[s].label} (${counts[s]||0})`])].map(([val,lbl])=>(
-          <button key={val} onClick={()=>setFilterStatus(val)} style={{
-            padding:"5px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,transition:"all 0.12s",
-            border:`1px solid ${filterStatus===val?(val==="all"?T.primary:STATUS_META[val]?.color||T.primary):T.border}`,
-            background:filterStatus===val?(val==="all"?T.primaryLight:STATUS_META[val]?.bg||T.primaryLight):"transparent",
-            color:filterStatus===val?(val==="all"?T.primary:STATUS_META[val]?.color||T.primary):T.textSub,
-          }}>{lbl}</button>
-        ))}
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:12,color:T.textMute}}>Sort:</span>
-          <Sel value={sortBy} onChange={setSortBy}
-            options={[{value:"date",label:"Date added"},{value:"company",label:"Company"},{value:"title",label:"Title"}]}
-            style={{width:140,padding:"5px 10px",fontSize:12}}/>
-        </div>
-      </div>
-
-      {(trackerErr || trackerMsg) && (
-        <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
+            <div>
+              <label style={{
+                display: "block",
+                fontSize: 14,
+                fontWeight: 600,
+                color: T.text,
+                marginBottom: 8,
+              }}>
+                Notes
+              </label>
+              <textarea
+                value={selectedJob.notes || ""}
+                onChange={(e) => handleUpdateNotes(selectedJob.id, e.target.value)}
+                placeholder="Add your notes, interview prep, or follow-up tasks..."
+                style={{
+                  width: "100%",
+                  minHeight: 120,
+                  padding: "12px",
+                  borderRadius: 8,
+                  border: `1px solid ${T.border}`,
+                  fontSize: 14,
+                  color: T.text,
+                  resize: "vertical",
+                  fontFamily: "inherit",
+                }}
+              />
+            </div>
+          </div>
+        ) : (
           <div style={{
-            fontSize:12,
-            borderRadius:8,
-            padding:"8px 12px",
-            border:`1px solid ${trackerErr ? T.redBorder : T.greenBorder}`,
-            background:trackerErr ? T.redBg : T.greenBg,
-            color:trackerErr ? T.red : T.green,
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: T.textMute,
           }}>
-            {trackerErr || trackerMsg}
-          </div>
-        </div>
-      )}
-
-      <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
-        <div style={{fontSize:12,color:T.textSub}}>
-          Tailoring remaining this week: <strong style={{color:T.text}}>{quota.remaining ?? 0}</strong> / {quota.weekly_limit || WEEKLY_TAILOR_LIMIT}
-          {quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
-        </div>
-      </div>
-
-      <div style={{flex:1,overflow:"auto",padding:"12px 32px 24px",maxWidth:1180,margin:"0 auto",width:"100%"}}>
-        {filtered.length===0&&(
-          <div style={{textAlign:"center",padding:"60px 0",color:T.textMute}}>
-            <div style={{fontSize:36,marginBottom:10}}>📭</div>
-            <div style={{fontSize:14,color:T.textSub,fontWeight:600,marginBottom:4}}>No applications here</div>
-            <div style={{fontSize:13}}>Save jobs from Job Search or Suggested Roles to start tracking.</div>
-          </div>
-        )}
-        {filtered.length>0&&(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
-            {filtered.map((job)=>{
-              const m=STATUS_META[job.status]||STATUS_META.saved;
-              return(
-                <Card key={job.id}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:16,fontWeight:750,color:T.text}}>{job.title||"—"}</div>
-                      <div style={{fontSize:13,color:T.primary,fontWeight:600,marginTop:2}}>{job.company||"—"}</div>
-                      <div style={{fontSize:12,color:T.textMute,marginTop:2}}>{job.location||"—"} · {formatDate(job.savedAt || job.created_at)}</div>
-                    </div>
-                    <Sel value={job.status} onChange={v=>updateStatus(job.id,v)}
-                      options={STATUS_OPTIONS.map(s=>({value:s,label:STATUS_META[s].label}))}
-                      style={{padding:"4px 8px",fontSize:12,color:m.color,background:m.bg,border:`1px solid ${m.border}`,borderRadius:20,minWidth:120}}/>
-                  </div>
-
-                  <div style={{marginBottom:8}}>
-                    <FL>Notes</FL>
-                    <TA value={job.notes || ""} onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,notes:v}:j))} rows={2}/>
-                    <div style={{marginTop:6}}>
-                      <Btn small variant="ghost" onClick={()=>saveNotes(job.id, jobs.find(j=>j.id===job.id)?.notes || "")}>Save Notes</Btn>
-                    </div>
-                  </div>
-
-                  <div style={{marginBottom:10}}>
-                    <FL>Tailored Resume Summary</FL>
-                    <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6}}>
-                      {job.tailoredResume||<em>Not tailored yet.</em>}
-                    </div>
-                  </div>
-
-                  {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
-
-                  <div style={{display:"flex",gap:8}}>
-                    <Btn onClick={()=>openTailorModal(job)} disabled={quota.remaining <= 0} variant="secondary" small>
-                      Tailor Application
-                    </Btn>
-                    <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
-                  </div>
-                </Card>
-              );
-            })}
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 64, marginBottom: 16 }}>👈</div>
+              <p style={{ fontSize: 16 }}>Select a job to view details</p>
+            </div>
           </div>
         )}
       </div>
-
-      {selectedTailorJob && (
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"grid",placeItems:"center",zIndex:50,padding:20}}>
-          <div style={{width:"100%",maxWidth:680,background:"#fff",borderRadius:12,border:`1px solid ${T.border}`,padding:20}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <div>
-                <div style={{fontSize:18,fontWeight:800,color:T.text}}>Tailor Application</div>
-                <div style={{fontSize:12,color:T.textSub}}>{selectedTailorJob.title} · {selectedTailorJob.company}</div>
-              </div>
-              <button onClick={()=>setTailorModalJobId(null)} style={{border:"none",background:"transparent",fontSize:20,cursor:"pointer",color:T.textMute}}>×</button>
-            </div>
-
-            <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>
-              Remaining this week: <strong style={{color:T.text}}>{quota.remaining}</strong> / {quota.weekly_limit}
-              {quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
-            </div>
-
-            <div style={{display:"grid",gap:10}}>
-              <div><FL>What excites you about this role?</FL><TA value={tailorInputs.excitement} onChange={(v)=>setTailorInputs(p=>({...p,excitement:v}))} rows={3}/></div>
-              <div><FL>Relevant experience to emphasize</FL><TA value={tailorInputs.emphasis} onChange={(v)=>setTailorInputs(p=>({...p,emphasis:v}))} rows={3}/></div>
-              <div><FL>Anything to avoid or de-emphasize? (optional)</FL><TA value={tailorInputs.avoid} onChange={(v)=>setTailorInputs(p=>({...p,avoid:v}))} rows={2}/></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div><FL>Resume</FL><Sel value={tailorInputs.resumeId} onChange={(v)=>setTailorInputs(p=>({...p,resumeId:v}))} options={[{value:"",label:"Select resume"},...resumes.map(d=>({value:d.id,label:d.tag}))]}/></div>
-                <div><FL>Cover letter</FL><Sel value={tailorInputs.coverId} onChange={(v)=>setTailorInputs(p=>({...p,coverId:v}))} options={[{value:"",label:"Select cover letter"},...covers.map(d=>({value:d.id,label:d.tag}))]}/></div>
-              </div>
-            </div>
-
-            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
-              <Btn variant="ghost" onClick={()=>setTailorModalJobId(null)} disabled={tailorLoading}>Cancel</Btn>
-              <Btn onClick={generateTailoredApplication} disabled={tailorLoading || quota.remaining <= 0}>
-                {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Generate tailored application"}
-              </Btn>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SIDEBAR + APP SHELL
+// APP SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
-function AppShell({
-  docs,setDocs,jobs,setJobs,userName,onLogout,profile,setProfileState,
-}){
-  const [active,setActive]=useState("profile");
-  const nav=[
-    {id:"profile",   icon:"👤", label:"Profile"},
-    {id:"suggested", icon:"🧭", label:"Suggested Jobs", disabled:true},
-    {id:"search",    icon:"🔍", label:"Job Search"},
-    {id:"tracker",   icon:"📊", label:"Tracker"},
-  ];
+function AppShell({ docs, setDocs, jobs, setJobs, userName, onLogout, profile, setProfileState }) {
+  const [active, setActive] = useState("search");
 
-  const views={
-    profile:   <ProfileView   docs={docs} setDocs={setDocs} profile={profile} setProfileState={setProfileState}/>,
-    suggested: <SuggestedView />,
-    search:    <SearchView    jobs={jobs} setJobs={setJobs} profile={profile}/>,
-    tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs}/>,
+  const views = {
+    search: <JobSearchView jobs={jobs} setJobs={setJobs} />,
+    saved: <SavedJobsView jobs={jobs} setJobs={setJobs} />,
   };
 
-  return(
-    <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-      <aside style={{width:224,background:`linear-gradient(180deg,${T.surface} 0%,#F8FAFF 100%)`,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,padding:"18px 12px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 10px 16px",marginBottom:8,borderBottom:`1px solid ${T.border}`}}>
-          <div style={{width:32,height:32,borderRadius:10,flexShrink:0,background:`linear-gradient(135deg,${T.primary},#0891b2)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",boxShadow:"0 10px 18px rgba(59,111,232,0.28)"}}>J</div>
-          <div style={{fontSize:13,fontWeight:800,color:T.text,lineHeight:1.2,letterSpacing:"0.01em"}}>Job<br/>Assistant</div>
+  const navItems = [
+    { id: "search", label: "Search Jobs", icon: "🔍", disabled: false },
+    { id: "saved", label: "Saved Jobs", icon: "💼", disabled: false },
+  ];
+
+  return (
+    <div style={{
+      display: "flex",
+      height: "100vh",
+      background: T.bg,
+      fontFamily: "'Inter', system-ui, sans-serif",
+    }}>
+      {/* Sidebar */}
+      <aside style={{
+        width: 260,
+        background: T.surface,
+        borderRight: `1px solid ${T.border}`,
+        display: "flex",
+        flexDirection: "column",
+        padding: 20,
+      }}>
+        <div style={{
+          marginBottom: 32,
+          paddingBottom: 20,
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          <h1 style={{
+            fontSize: 22,
+            fontWeight: 700,
+            color: T.text,
+          }}>
+            Job Assistant
+          </h1>
+          <p style={{
+            fontSize: 13,
+            color: T.textMute,
+            marginTop: 4,
+          }}>
+            Manage your job search
+          </p>
         </div>
-        <nav style={{display:"flex",flexDirection:"column",gap:4,marginTop:6,flex:1}}>
-          {nav.map(n=>(
-            <button key={n.id} onClick={()=>{ if(!n.disabled) setActive(n.id); }} style={{
-              display:"flex",alignItems:"center",gap:10,padding:"10px 11px",borderRadius:10,border:"none",
-              cursor:n.disabled?"not-allowed":"pointer",width:"100%",background:active===n.id?T.primaryLight:"transparent",
-              color:n.disabled?T.textMute:(active===n.id?T.primary:T.textSub),fontFamily:"inherit",fontSize:13,
-              fontWeight:active===n.id?700:560,transition:"all 0.12s",textAlign:"left"
-            }} disabled={n.disabled}>
-              <span style={{fontSize:15,flexShrink:0,width:22,height:22,display:"grid",placeItems:"center",background:active===n.id?"#FFFFFF":"transparent",borderRadius:7,border:active===n.id?`1px solid ${T.primaryMid}`:"1px solid transparent"}}>{n.icon}</span>
-              <span style={{flex:1}}>{n.label}</span>
-              {n.disabled && <span style={{fontSize:10,fontWeight:700,color:T.textMute}}>Coming Soon</span>}
-              {active===n.id&&<div style={{width:6,height:6,borderRadius:"50%",background:T.primary,flexShrink:0}}/>}
+
+        <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          {navItems.map((n) => (
+            <button
+              key={n.id}
+              onClick={() => !n.disabled && setActive(n.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "none",
+                cursor: n.disabled ? "not-allowed" : "pointer",
+                width: "100%",
+                background: active === n.id ? T.primaryLight : "transparent",
+                color: n.disabled ? T.textMute : (active === n.id ? T.primary : T.textSub),
+                fontFamily: "inherit",
+                fontSize: 14,
+                fontWeight: active === n.id ? 600 : 500,
+                transition: "all 0.2s",
+                textAlign: "left",
+              }}
+              disabled={n.disabled}
+              onMouseEnter={(e) => {
+                if (!n.disabled && active !== n.id) {
+                  e.currentTarget.style.background = T.surfaceHover;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!n.disabled && active !== n.id) {
+                  e.currentTarget.style.background = "transparent";
+                }
+              }}
+            >
+              <span style={{ fontSize: 18 }}>{n.icon}</span>
+              <span style={{ flex: 1 }}>{n.label}</span>
+              {n.disabled && (
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: T.textMute,
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  background: T.bg,
+                }}>
+                  Soon
+                </span>
+              )}
             </button>
           ))}
         </nav>
-        <div style={{borderTop:`1px solid ${T.border}`,paddingTop:12,marginTop:6}}>
-          <div style={{fontSize:12,color:T.textSub,padding:"5px 10px 9px",fontWeight:600}}>
-            Signed in as {userName}
+
+        <div style={{
+          borderTop: `1px solid ${T.border}`,
+          paddingTop: 16,
+        }}>
+          <div style={{
+            fontSize: 13,
+            color: T.textSub,
+            padding: "8px 12px",
+            fontWeight: 600,
+            marginBottom: 8,
+          }}>
+            {userName}
           </div>
-          <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 10px",borderRadius:10,border:"none",cursor:"pointer",width:"100%",background:"transparent",color:T.textMute,fontFamily:"inherit",fontSize:12,fontWeight:600,transition:"all 0.12s",textAlign:"left"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=T.redBg;e.currentTarget.style.color=T.red;}}
-            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMute;}}>
-            <span style={{fontSize:14}}>→</span> Sign out
+          <button
+            onClick={onLogout}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "none",
+              cursor: "pointer",
+              width: "100%",
+              background: "transparent",
+              color: T.textMute,
+              fontFamily: "inherit",
+              fontSize: 13,
+              fontWeight: 600,
+              transition: "all 0.2s",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = T.redBg;
+              e.currentTarget.style.color = T.red;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = T.textMute;
+            }}
+          >
+            <span style={{ fontSize: 16 }}>→</span> Sign out
           </button>
         </div>
       </aside>
-      <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:`radial-gradient(circle at 0% 0%,#FFFFFF 0%,${T.bg} 55%)`}}>
+
+      {/* Main Content */}
+      <main style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}>
         {views[active]}
       </main>
     </div>
@@ -1657,31 +1680,32 @@ function AppShell({
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOT
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function App(){
-  const [loggedIn,setLoggedIn]=useState(false);
-  const [bootstrappingAuth,setBootstrappingAuth]=useState(true);
-  const [userName,setUserName]=useState("");
-  const [userId,setUserId]=useState("");
-  const [docs,setDocs]=useState([]);
-  const [jobs,setJobs]=useState([]);
-  const [profile,setProfileState]=useState({ name: "" });
-  const [showOnboarding,setShowOnboarding]=useState(false);
+export default function App() {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [bootstrappingAuth, setBootstrappingAuth] = useState(true);
+  const [userName, setUserName] = useState("");
+  const [userId, setUserId] = useState("");
+  const [docs, setDocs] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [profile, setProfileState] = useState({ name: "" });
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Load data from Supabase after login
-  async function loadData(){
-    try{
-      const [d,j,p]=await Promise.all([
+  async function loadData() {
+    try {
+      const [d, j, p] = await Promise.all([
         store.getDocs(),
         store.getJobs(),
         store.getProfile(),
       ]);
-      setDocs(d||[]);
-      setJobs(j||[]);
+      setDocs(d || []);
+      setJobs(j || []);
       setProfileState((prev) => ({
         ...prev,
         ...(p || {}),
       }));
-    }catch(e){console.error("Error loading data:",e);}
+    } catch (e) {
+      console.error("Error loading data:", e);
+    }
   }
 
   useEffect(() => {
@@ -1765,30 +1789,46 @@ export default function App(){
 
   if (bootstrappingAuth) {
     return (
-      <div style={{minHeight:"100vh",display:"grid",placeItems:"center",background:T.bg,color:T.textSub,fontFamily:"DM Sans, system-ui, sans-serif"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,fontSize:14,fontWeight:600}}>
-          <Spinner /> Loading your workspace...
+      <div style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        background: T.bg,
+        color: T.textSub,
+        fontFamily: "'Inter', system-ui, sans-serif",
+      }}>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          fontSize: 15,
+          fontWeight: 600,
+        }}>
+          <Spinner />
+          Loading your workspace...
         </div>
       </div>
     );
   }
 
-  if(!loggedIn){
-    return(
+  if (!loggedIn) {
+    return (
       <>
         <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
-          *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-          body{font-family:'Outfit',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
-          input::placeholder{color:#94A3B8;}
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+          input::placeholder { color: ${T.textMute}; }
         `}</style>
-        <LandingPage onLogin={async (name, id)=>{
-          setUserName(name);
-          setUserId(id || "");
-          setProfileState((prev) => ({ ...prev, name: name || prev.name || "" }));
-          setLoggedIn(true);
-          await loadData();
-        }}/>
+        <LandingPage
+          onLogin={async (name, id) => {
+            setUserName(name);
+            setUserId(id || "");
+            setProfileState((prev) => ({ ...prev, name: name || prev.name || "" }));
+            setLoggedIn(true);
+            await loadData();
+          }}
+        />
       </>
     );
   }
@@ -1797,26 +1837,27 @@ export default function App(){
     return <OnboardingFlow profile={profile} onSave={handleFinishOnboarding} onSkip={handleSkipOnboarding} />;
   }
 
-  return(
+  return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
-        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-        body{background:${T.bg};color:${T.text};font-family:'DM Sans',system-ui,sans-serif;}
-        ::-webkit-scrollbar{width:5px;height:5px;}
-        ::-webkit-scrollbar-track{background:${T.bg};}
-        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:99px;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        select option{background:${T.surface};color:${T.text};}
-        button,input,textarea,select{font-family:'DM Sans',system-ui,sans-serif;}
-        a{color:${T.primary};}
-        button:not(:disabled):hover{opacity:0.9;transform:translateY(-1px);}
-        button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{
-          outline:2px solid ${T.primaryMid};
-          outline-offset:2px;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: ${T.bg}; color: ${T.text}; font-family: 'Inter', system-ui, sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: ${T.bg}; }
+        ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${T.textMute}; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        select option { background: ${T.surface}; color: ${T.text}; }
+        button, input, textarea, select { font-family: 'Inter', system-ui, sans-serif; }
+        a { color: ${T.primary}; }
+        button:not(:disabled):active { transform: translateY(0); }
       `}</style>
-      <AppShell docs={docs} setDocs={setDocs} jobs={jobs} setJobs={setJobs}
+      <AppShell
+        docs={docs}
+        setDocs={setDocs}
+        jobs={jobs}
+        setJobs={setJobs}
         userName={userName}
         onLogout={handleLogout}
         profile={profile}
