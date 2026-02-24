@@ -100,9 +100,23 @@ const OCCUPATION_OPTIONS = Array.from(new Set([
 
 async function searchJobsByKeyword(query) {
   const supabase = getSupabaseClient();
+  const requestBody = { query, page: 1, numPages: 1, country: "us,ca", datePosted: "all" };
+  const nowSec = Math.floor(Date.now() / 1000);
+  const { data: sessionData } = await supabase.auth.getSession();
+  const session = sessionData?.session || null;
+  if (!session) {
+    throw new Error("You are signed out. Please sign in again.");
+  }
+  if ((session.expires_at || 0) <= nowSec + 60) {
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) {
+      throw new Error("Session expired. Please sign in again.");
+    }
+  }
+
   async function invokeSearch() {
     return supabase.functions.invoke("job-search", {
-      body: { query, page: 1, numPages: 1, country: "us,ca", datePosted: "all" },
+      body: requestBody,
     });
   }
 
