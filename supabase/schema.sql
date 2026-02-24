@@ -81,7 +81,7 @@ create table if not exists public.saved_jobs (
   url text not null default '',
   description text not null default '',
   status text not null default 'saved'
-    check (status in ('saved', 'applied', 'interview', 'offer', 'rejected')),
+    check (status in ('saved', 'tailored', 'applied', 'interview', 'offer', 'rejected')),
   notes text not null default '',
   "savedAt" timestamptz not null default now(),
   created_at timestamptz not null default now(),
