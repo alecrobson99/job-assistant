@@ -23,8 +23,14 @@ serve(async (req) => {
     const monthlyPriceId = Deno.env.get("STRIPE_PRICE_MONTHLY");
     const yearlyPriceId = Deno.env.get("STRIPE_PRICE_YEARLY");
 
-    if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey || !stripeSecretKey || !appUrl) {
-      throw new Error("Missing required environment variables");
+    const missingEnv: string[] = [];
+    if (!supabaseUrl) missingEnv.push("SUPABASE_URL");
+    if (!supabaseAnonKey) missingEnv.push("SUPABASE_ANON_KEY");
+    if (!serviceRoleKey) missingEnv.push("SUPABASE_SERVICE_ROLE_KEY");
+    if (!stripeSecretKey) missingEnv.push("STRIPE_SECRET_KEY");
+    if (!appUrl) missingEnv.push("APP_URL");
+    if (missingEnv.length > 0) {
+      throw new Error(`Missing required environment variables: ${missingEnv.join(", ")}`);
     }
 
     const authHeader = req.headers.get("Authorization");
@@ -47,6 +53,13 @@ serve(async (req) => {
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!user.email_confirmed_at) {
+      return new Response(JSON.stringify({ error: "Email verification required" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -403,7 +403,7 @@ function LandingPage({ onLogin }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════════
-async function callClaude(system, userMsg, maxTokens=1500) {
+async function callClaude(system, userMsg, maxTokens=1500, options={}) {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.functions.invoke("anthropic-proxy", {
     body: {
@@ -411,6 +411,7 @@ async function callClaude(system, userMsg, maxTokens=1500) {
       userMsg,
       maxTokens,
       model: "claude-sonnet-4-20250514",
+      jobId: options.jobId || null,
     },
   });
   if (error) throw error;
@@ -1562,12 +1563,11 @@ function TrackerView({jobs,setJobs,docs}){
     setTailorLoading(true);
     setTrackerErr("");
     try {
-      const updatedQuota = await store.consumeTailoringUse(selectedTailorJob.id);
-      setQuota(updatedQuota);
-
       const raw = await callClaude(
         "You are an expert resume writer. Return only valid JSON with keys: tailored_resume_text, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score. tailored_resume_text must be a full resume draft (not a summary) that preserves the source resume structure and section order as closely as possible, including headings, job entries, and bullet style. Keep output factual and concise. No markdown code fences.",
-        `Job Description:\n${selectedTailorJob.description}\n\nSource Resume (preserve structure):\n${resume?.content || "(not provided)"}\n\nSource Cover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`
+        `Job Description:\n${selectedTailorJob.description}\n\nSource Resume (preserve structure):\n${resume?.content || "(not provided)"}\n\nSource Cover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`,
+        1500,
+        { jobId: selectedTailorJob.id }
       );
       let data;
       try {
@@ -1587,11 +1587,20 @@ function TrackerView({jobs,setJobs,docs}){
       };
       const dbRow = await store.updateJob(selectedTailorJob.id, updates);
       setJobs((prev) => prev.map((j) => (j.id === selectedTailorJob.id ? { ...j, ...dbRow } : j)));
+      try {
+        const refreshedQuota = await store.getTailoringQuota();
+        setQuota(refreshedQuota);
+      } catch {
+        // no-op: keep previous quota UI
+      }
       setTrackerMsg("Tailored application generated.");
       setTimeout(()=>setTrackerMsg(""),2000);
       setTailorModalJobId(null);
     } catch (e) {
-      if ((e?.message || "").includes("WEEKLY_LIMIT_REACHED")) {
+      if (
+        (e?.message || "").includes("WEEKLY_LIMIT_REACHED") ||
+        (e?.message || "").toLowerCase().includes("usage limit reached")
+      ) {
         setTrackerErr("You have reached 7 tailored applications for this week.");
       } else {
         setTrackerErr(`Tailoring failed: ${e.message || e}`);
