@@ -100,16 +100,25 @@ const OCCUPATION_OPTIONS = Array.from(new Set([
 
 async function searchJobsByKeyword(query) {
   const requestBody = { query, page: 1, numPages: 1, country: "us,ca", datePosted: "all" };
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   const supabase = getSupabaseClient();
   const { data: { session } } = await supabase.auth.getSession();
   
+  if (!anonKey) {
+    throw new Error("Missing VITE_SUPABASE_ANON_KEY.");
+  }
+
   if (!session?.access_token) {
     throw new Error("No active session. Please log in again.");
   }
 
-  // Use invoke so Supabase sends project-correct auth/apikey headers.
+  // Send explicit headers so the gateway always sees both credentials.
   const { data, error } = await supabase.functions.invoke("job-search", {
     body: requestBody,
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${session.access_token}`,
+    },
   });
 
   if (error) throw new Error(error.message || "Job search function failed.");
