@@ -20,12 +20,13 @@ const T = {
 
 const STATUS_META = {
   saved:     { color: T.primary, bg: T.primaryLight, border: T.primaryMid,    label: "Saved"     },
+  tailored:  { color: T.violet,  bg: T.violetBg,     border: T.violetBorder,  label: "Tailored Jobs" },
   applied:   { color: T.teal,    bg: T.tealBg,       border: T.tealBorder,    label: "Applied"   },
   interview: { color: T.amber,   bg: T.amberBg,      border: T.amberBorder,   label: "Interview" },
   offer:     { color: T.green,   bg: T.greenBg,      border: T.greenBorder,   label: "Offer"     },
   rejected:  { color: T.red,     bg: T.redBg,        border: T.redBorder,     label: "Rejected"  },
 };
-const STATUS_OPTIONS = ["saved","applied","interview","offer","rejected"];
+const STATUS_OPTIONS = ["saved","tailored","applied","interview","offer","rejected"];
 const FEEDBACK_EMAIL = "feedback@jobassistant.app";
 const WEEKLY_TAILOR_LIMIT = 7;
 const LOCATION_OPTIONS = [
@@ -576,6 +577,46 @@ function exportCSV(jobs,docs) {
   const csv=[hdrs.join(","),...rows].join("\n");
   const blob=new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob);
   const a=document.createElement("a"); a.href=url; a.download="applications.csv"; a.click(); URL.revokeObjectURL(url);
+}
+
+function sanitizeFilenamePart(v) {
+  return (v || "file").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "file";
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildTailoredText(job, type) {
+  const heading = type === "resume" ? "Tailored Resume" : "Tailored Cover Letter";
+  const body = type === "resume" ? (job.tailoredResume || "") : (job.tailoredCover || "");
+  return `${heading}\n\nJob: ${job.title || "Unknown Role"}\nCompany: ${job.company || "Unknown Company"}\nLocation: ${job.location || "Unknown"}\n\n${body}`.trim();
+}
+
+function downloadTailoredArtifact(job, type, format) {
+  const text = buildTailoredText(job, type);
+  const base = `${sanitizeFilenamePart(job.company)}-${sanitizeFilenamePart(job.title)}-${type}`;
+  if (!text) throw new Error("No tailored content available yet.");
+
+  if (format === "txt") {
+    return downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), `${base}.txt`);
+  }
+
+  if (format === "pdf") {
+    // MVP export: plain-text payload with .pdf extension for quick portability.
+    return downloadBlob(new Blob([text], { type: "application/pdf" }), `${base}.pdf`);
+  }
+
+  // MVP export: plain-text payload with .docx extension.
+  return downloadBlob(
+    new Blob([text], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
+    `${base}.docx`
+  );
 }
 
 // ─── Design primitives ────────────────────────────────────────────────────────
@@ -1281,6 +1322,7 @@ function TrackerView({jobs,setJobs,docs}){
   });
   const [tailorLoading,setTailorLoading]=useState(false);
   const [quota,setQuota]=useState({ weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null });
+  const [downloadFormatByJob,setDownloadFormatByJob]=useState({});
 
   async function updateStatus(id,status){
     setTrackerErr("");
@@ -1318,6 +1360,19 @@ function TrackerView({jobs,setJobs,docs}){
     }catch(e){
       setJobs(prev);
       setTrackerErr(`Could not delete job: ${e.message}`);
+    }
+  }
+
+  function setDownloadFormat(jobId, format) {
+    setDownloadFormatByJob((prev) => ({ ...prev, [jobId]: format }));
+  }
+
+  function downloadArtifact(job, type) {
+    try {
+      const format = downloadFormatByJob[job.id] || "txt";
+      downloadTailoredArtifact(job, type, format);
+    } catch (e) {
+      setTrackerErr(`Download failed: ${e.message || e}`);
     }
   }
 
@@ -1393,6 +1448,7 @@ function TrackerView({jobs,setJobs,docs}){
         matchScore: Number.isFinite(data.match_score) ? data.match_score : null,
         resumeDocId: resume?.id || null,
         coverDocId: cover?.id || null,
+        status: "tailored",
       };
       const dbRow = await store.updateJob(selectedTailorJob.id, updates);
       setJobs((prev) => prev.map((j) => (j.id === selectedTailorJob.id ? { ...j, ...dbRow } : j)));
@@ -1494,11 +1550,31 @@ function TrackerView({jobs,setJobs,docs}){
                     </div>
                   </div>
 
+                  {(job.tailoredResume || job.tailoredCover) && (
+                    <div style={{marginBottom:10}}>
+                      <FL>Attachments</FL>
+                      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+                        <Sel
+                          value={downloadFormatByJob[job.id] || "txt"}
+                          onChange={(v)=>setDownloadFormat(job.id, v)}
+                          options={[
+                            { value:"txt", label:".txt" },
+                            { value:"pdf", label:".pdf" },
+                            { value:"docx", label:".docx" },
+                          ]}
+                          style={{width:120,padding:"5px 10px",fontSize:12}}
+                        />
+                        {job.tailoredResume && <Btn small variant="ghost" onClick={()=>downloadArtifact(job, "resume")}>Download Resume</Btn>}
+                        {job.tailoredCover && <Btn small variant="ghost" onClick={()=>downloadArtifact(job, "cover")}>Download Cover</Btn>}
+                      </div>
+                    </div>
+                  )}
+
                   {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
 
                   <div style={{display:"flex",gap:8}}>
                     <Btn onClick={()=>openTailorModal(job)} disabled={quota.remaining <= 0} variant="secondary" small>
-                      Tailor Application
+                      Tailor AI
                     </Btn>
                     <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
                   </div>
@@ -1538,7 +1614,7 @@ function TrackerView({jobs,setJobs,docs}){
             <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
               <Btn variant="ghost" onClick={()=>setTailorModalJobId(null)} disabled={tailorLoading}>Cancel</Btn>
               <Btn onClick={generateTailoredApplication} disabled={tailorLoading || quota.remaining <= 0}>
-                {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Generate tailored application"}
+                {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Tailor + Approve"}
               </Btn>
             </div>
           </div>
