@@ -395,7 +395,7 @@ const buildTailoredDocuments = (job, payload, selectedFormats) => {
   const docs = [];
 
   const sources = [
-    { type: "resume", label: "Resume", content: payload.tailored_resume_summary || "" },
+    { type: "resume", label: "Resume", content: payload.tailored_resume_text || payload.tailored_resume_summary || "" },
     { type: "cover_letter", label: "Cover Letter", content: payload.tailored_cover_letter || "" },
   ];
 
@@ -1509,8 +1509,8 @@ function TrackerView({jobs,setJobs,docs}){
       setQuota(updatedQuota);
 
       const raw = await callClaude(
-        "You generate concise, professional, factual application content. Return only JSON with keys: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score.",
-        `Job Description:\n${selectedTailorJob.description}\n\nResume:\n${resume?.content || "(not provided)"}\n\nCover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`
+        "You are an expert resume writer. Return only valid JSON with keys: tailored_resume_text, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score. tailored_resume_text must be a full resume draft (not a summary) that preserves the source resume structure and section order as closely as possible, including headings, job entries, and bullet style. Keep output factual and concise. No markdown code fences.",
+        `Job Description:\n${selectedTailorJob.description}\n\nSource Resume (preserve structure):\n${resume?.content || "(not provided)"}\n\nSource Cover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`
       );
       let data;
       try {
@@ -1519,7 +1519,7 @@ function TrackerView({jobs,setJobs,docs}){
         throw new Error("AI response format error. Please try again.");
       }
       const updates = {
-        tailoredResume: data.tailored_resume_summary || "",
+        tailoredResume: data.tailored_resume_text || data.tailored_resume_summary || "",
         tailoredCover: data.tailored_cover_letter || "",
         keywords: Array.isArray(data.keyword_alignment) ? data.keyword_alignment : [],
         matchScore: Number.isFinite(data.match_score) ? data.match_score : null,
@@ -1623,8 +1623,8 @@ function TrackerView({jobs,setJobs,docs}){
                   </div>
 
                   <div style={{marginBottom:10}}>
-                    <FL>Tailored Resume Summary</FL>
-                    <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6}}>
+                    <FL>Tailored Resume</FL>
+                    <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
                       {job.tailoredResume||<em>Not tailored yet.</em>}
                     </div>
                   </div>
