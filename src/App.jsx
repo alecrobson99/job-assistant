@@ -101,38 +101,55 @@ const OCCUPATION_OPTIONS = Array.from(new Set([
 async function searchJobsByKeyword(query) {
   const supabase = getSupabaseClient();
   const requestBody = { query, page: 1, numPages: 1, country: "us,ca", datePosted: "all" };
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !anonKey) {
+    throw new Error("Missing Supabase URL or anon key.");
+  }
   const nowSec = Math.floor(Date.now() / 1000);
   const { data: sessionData } = await supabase.auth.getSession();
-  const session = sessionData?.session || null;
+  let session = sessionData?.session || null;
   if (!session) {
     throw new Error("You are signed out. Please sign in again.");
   }
   if ((session.expires_at || 0) <= nowSec + 60) {
-    const { error: refreshError } = await supabase.auth.refreshSession();
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) {
       throw new Error("Session expired. Please sign in again.");
     }
+    session = refreshed?.session || session;
   }
 
-  async function invokeSearch() {
-    return supabase.functions.invoke("job-search", {
-      body: requestBody,
+  async function callFunction(accessToken) {
+    const res = await fetch(`${supabaseUrl}/functions/v1/job-search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(requestBody),
     });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(payload?.message || payload?.error || `Job search function failed (${res.status}).`);
+    }
+    return payload;
   }
 
-  let { data, error } = await invokeSearch();
-  const authErr = (error?.message || "").toLowerCase();
-  if (error && authErr.includes("jwt")) {
-    await supabase.auth.refreshSession().catch(() => null);
-    ({ data, error } = await invokeSearch());
-  }
-
-  if (error) {
-    if ((error.message || "").toLowerCase().includes("jwt")) {
+  let data;
+  try {
+    data = await callFunction(session.access_token);
+  } catch (err) {
+    const msg = (err?.message || "").toLowerCase();
+    if (!msg.includes("jwt")) throw err;
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !refreshed?.session?.access_token) {
       throw new Error("Session expired. Sign out and sign back in, then retry search.");
     }
-    throw new Error(`Job search function failed: ${error.message}`);
+    data = await callFunction(refreshed.session.access_token);
   }
+
   if (data?.error) {
     throw new Error(data.error);
   }
