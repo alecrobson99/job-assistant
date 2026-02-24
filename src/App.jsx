@@ -14,7 +14,7 @@ const T = {
   green: "#16A34A", greenBg: "#F0FDF4", greenBorder: "#BBF7D0",
   amber: "#B45309", amberBg: "#FFFBEB", amberBorder: "#FDE68A",
   red: "#DC2626", redBg: "#FEF2F2", redBorder: "#FECACA",
-  teal: "#0D7490", tealBg: "#F0FDFF", tealBorder: "#A5F3FC",
+  teal: "#0D7490", tealBg: "#F0FDFF", teasamelBorder: "#A5F3FC",
   violet: "#7C3AED", violetBg: "#F5F3FF", violetBorder: "#DDD6FE",
 };
 
