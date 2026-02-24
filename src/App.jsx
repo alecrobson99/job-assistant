@@ -100,11 +100,23 @@ const OCCUPATION_OPTIONS = Array.from(new Set([
 
 async function searchJobsByKeyword(query) {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.functions.invoke("job-search", {
-    body: { query, page: 1, numPages: 1, country: "us", datePosted: "all" },
-  });
+  async function invokeSearch() {
+    return supabase.functions.invoke("job-search", {
+      body: { query, page: 1, numPages: 1, country: "us,ca", datePosted: "all" },
+    });
+  }
+
+  let { data, error } = await invokeSearch();
+  const authErr = (error?.message || "").toLowerCase();
+  if (error && authErr.includes("jwt")) {
+    await supabase.auth.refreshSession().catch(() => null);
+    ({ data, error } = await invokeSearch());
+  }
 
   if (error) {
+    if ((error.message || "").toLowerCase().includes("jwt")) {
+      throw new Error("Session expired. Sign out and sign back in, then retry search.");
+    }
     throw new Error(`Job search function failed: ${error.message}`);
   }
   if (data?.error) {
@@ -577,46 +589,6 @@ function exportCSV(jobs,docs) {
   const csv=[hdrs.join(","),...rows].join("\n");
   const blob=new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob);
   const a=document.createElement("a"); a.href=url; a.download="applications.csv"; a.click(); URL.revokeObjectURL(url);
-}
-
-function sanitizeFilenamePart(v) {
-  return (v || "file").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "file";
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function buildTailoredText(job, type) {
-  const heading = type === "resume" ? "Tailored Resume" : "Tailored Cover Letter";
-  const body = type === "resume" ? (job.tailoredResume || "") : (job.tailoredCover || "");
-  return `${heading}\n\nJob: ${job.title || "Unknown Role"}\nCompany: ${job.company || "Unknown Company"}\nLocation: ${job.location || "Unknown"}\n\n${body}`.trim();
-}
-
-function downloadTailoredArtifact(job, type, format) {
-  const text = buildTailoredText(job, type);
-  const base = `${sanitizeFilenamePart(job.company)}-${sanitizeFilenamePart(job.title)}-${type}`;
-  if (!text) throw new Error("No tailored content available yet.");
-
-  if (format === "txt") {
-    return downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), `${base}.txt`);
-  }
-
-  if (format === "pdf") {
-    // MVP export: plain-text payload with .pdf extension for quick portability.
-    return downloadBlob(new Blob([text], { type: "application/pdf" }), `${base}.pdf`);
-  }
-
-  // MVP export: plain-text payload with .docx extension.
-  return downloadBlob(
-    new Blob([text], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
-    `${base}.docx`
-  );
 }
 
 // ─── Design primitives ────────────────────────────────────────────────────────
@@ -1322,7 +1294,6 @@ function TrackerView({jobs,setJobs,docs}){
   });
   const [tailorLoading,setTailorLoading]=useState(false);
   const [quota,setQuota]=useState({ weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null });
-  const [downloadFormatByJob,setDownloadFormatByJob]=useState({});
 
   async function updateStatus(id,status){
     setTrackerErr("");
@@ -1360,19 +1331,6 @@ function TrackerView({jobs,setJobs,docs}){
     }catch(e){
       setJobs(prev);
       setTrackerErr(`Could not delete job: ${e.message}`);
-    }
-  }
-
-  function setDownloadFormat(jobId, format) {
-    setDownloadFormatByJob((prev) => ({ ...prev, [jobId]: format }));
-  }
-
-  function downloadArtifact(job, type) {
-    try {
-      const format = downloadFormatByJob[job.id] || "txt";
-      downloadTailoredArtifact(job, type, format);
-    } catch (e) {
-      setTrackerErr(`Download failed: ${e.message || e}`);
     }
   }
 
