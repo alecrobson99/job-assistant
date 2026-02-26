@@ -173,6 +173,8 @@ function LandingPage({ onLogin }) {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [billingCycle, setBillingCycle] = useState("monthly");
+  const [currency, setCurrency] = useState("USD");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -247,84 +249,191 @@ function LandingPage({ onLogin }) {
     fontFamily: "inherit",
     boxSizing: "border-box",
   };
+
+  const pricing = {
+    USD: {
+      monthly: [
+        { name: "Free", price: 0, sub: "For individual job seekers getting started." },
+        { name: "Pro", price: 29, sub: "For active applicants who tailor at scale." },
+        { name: "Team", price: 99, sub: "For coaches and small teams managing candidates." },
+      ],
+      yearly: [
+        { name: "Free", price: 0, sub: "For individual job seekers getting started." },
+        { name: "Pro", price: 24, sub: "Billed annually. Save with higher usage." },
+        { name: "Team", price: 82, sub: "Billed annually. Shared workflows included." },
+      ],
+    },
+    CAD: {
+      monthly: [
+        { name: "Free", price: 0, sub: "For individual job seekers getting started." },
+        { name: "Pro", price: 39, sub: "For active applicants who tailor at scale." },
+        { name: "Team", price: 129, sub: "For coaches and small teams managing candidates." },
+      ],
+      yearly: [
+        { name: "Free", price: 0, sub: "For individual job seekers getting started." },
+        { name: "Pro", price: 32, sub: "Billed annually. Save with higher usage." },
+        { name: "Team", price: 108, sub: "Billed annually. Shared workflows included." },
+      ],
+    },
+  };
   
   return (
-    <div style={{ minHeight:"100vh", background:"#F5F7FB", padding:"32px 20px" }}>
-      <main style={{ maxWidth:980, margin:"0 auto", display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:24 }}>
-        <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:28 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#5C6B8A", marginBottom:12 }}>EARLY TOOL · MVP</div>
-          <h1 style={{ fontSize:34, lineHeight:1.2, margin:"0 0 10px", color:"#0F172A" }}>
-            Track jobs and tailor applications faster.
-          </h1>
-          <p style={{ fontSize:15, lineHeight:1.6, color:"#475569", margin:"0 0 16px" }}>
-            Built for active job seekers who want a simple tracker plus practical AI tailoring in one place.
-          </p>
-          <ul style={{ margin:"0 0 18px 18px", color:"#334155", lineHeight:1.8, fontSize:14 }}>
-            <li>Save jobs from one search flow and keep statuses updated.</li>
-            <li>Generate tailored application content from your own documents.</li>
-            <li>Weekly limits keep usage predictable while we improve reliability.</li>
-          </ul>
-          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            <button onClick={()=>setIsLogin(true)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
-              Start tracking jobs
-            </button>
-            <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid #D0D7E2", borderRadius:8, color:"#334155", textDecoration:"none", fontWeight:600 }}>
-              Send feedback
-            </a>
-          </div>
-        </section>
+    <div style={{ minHeight:"100vh", background:"#F5F7FB", padding:"20px 16px 40px" }}>
+      <main style={{ maxWidth:1120, margin:"0 auto", display:"grid", gap:18 }}>
+        <header style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+          <div style={{ fontSize:18, fontWeight:800, color:"#0F172A" }}>Job Assistant</div>
+          <nav style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <a href="#product" style={{ textDecoration:"none", color:"#334155", fontSize:13, fontWeight:650, padding:"7px 10px", border:"1px solid #E2E8F0", borderRadius:8 }}>Product</a>
+            <a href="#pricing" style={{ textDecoration:"none", color:"#334155", fontSize:13, fontWeight:650, padding:"7px 10px", border:"1px solid #E2E8F0", borderRadius:8 }}>Pricing</a>
+            <a href="#faq" style={{ textDecoration:"none", color:"#334155", fontSize:13, fontWeight:650, padding:"7px 10px", border:"1px solid #E2E8F0", borderRadius:8 }}>FAQ</a>
+            <button onClick={()=>setIsLogin(true)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"8px 12px", fontWeight:700, cursor:"pointer", fontSize:13 }}>Sign in</button>
+          </nav>
+        </header>
 
-        <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:12, padding:24 }}>
-          <h2 style={{ fontSize:20, margin:"0 0 6px", color:"#0F172A" }}>
-            {isLogin ? "Sign in" : "Create account"}
-          </h2>
-          <p style={{ fontSize:13, color:"#64748B", margin:"0 0 16px" }}>
-            {isLogin ? "Continue where you left off." : "Create an account to start tracking."}
-          </p>
-
-          {error && (
-            <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
-              padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }}>
-              {error}
+        <section id="product" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))", gap:18 }}>
+          <div style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:28 }}>
+            <div style={{ fontSize:12, fontWeight:800, color:"#5C6B8A", marginBottom:10, letterSpacing:"0.04em" }}>JOB SEARCH CRM + TAILORING</div>
+            <h1 style={{ fontSize:38, lineHeight:1.12, margin:"0 0 10px", color:"#0F172A", letterSpacing:"-0.03em" }}>
+              Find, track, and tailor applications in one workspace.
+            </h1>
+            <p style={{ fontSize:15, lineHeight:1.6, color:"#475569", margin:"0 0 16px", maxWidth:700 }}>
+              Replace scattered notes and repetitive edits with a single pipeline: search jobs, track application status, and generate tailored resume/cover content from your own documents.
+            </p>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:10, marginBottom:18 }}>
+              {[
+                "Unified application tracker",
+                "Tailored content generation",
+                "Document management",
+                "Built-in weekly usage controls",
+              ].map((item) => (
+                <div key={item} style={{ border:"1px solid #E2E8F0", borderRadius:10, padding:"10px 12px", background:"#F8FAFF", fontSize:13, color:"#334155", fontWeight:600 }}>
+                  {item}
+                </div>
+              ))}
             </div>
-          )}
+            <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+              <button onClick={()=>setIsLogin(false)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
+                Create free account
+              </button>
+              <a href="#pricing" style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid #D0D7E2", borderRadius:8, color:"#334155", textDecoration:"none", fontWeight:700 }}>
+                See pricing
+              </a>
+            </div>
+          </div>
 
-          <form onSubmit={handleSubmit}>
-            {!isLogin && (
-              <div style={{ marginBottom:12 }}>
-                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
-                <input type="text" value={name} onChange={e=>setName(e.target.value)}
-                  placeholder="Jane Smith" required style={inputStyle}/>
+          <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
+            <h2 style={{ fontSize:20, margin:"0 0 6px", color:"#0F172A" }}>
+              {isLogin ? "Sign in" : "Create account"}
+            </h2>
+            <p style={{ fontSize:13, color:"#64748B", margin:"0 0 16px" }}>
+              {isLogin ? "Continue where you left off." : "Start on Free, upgrade only when needed."}
+            </p>
+
+            {error && (
+              <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
+                padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }}>
+                {error}
               </div>
             )}
 
-            <div style={{ marginBottom:12 }}>
-              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                placeholder="you@example.com" required style={inputStyle}/>
+            <form onSubmit={handleSubmit}>
+              {!isLogin && (
+                <div style={{ marginBottom:12 }}>
+                  <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
+                  <input type="text" value={name} onChange={e=>setName(e.target.value)}
+                    placeholder="Jane Smith" required style={inputStyle}/>
+                </div>
+              )}
+
+              <div style={{ marginBottom:12 }}>
+                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                  placeholder="you@example.com" required style={inputStyle}/>
+              </div>
+
+              <div style={{ marginBottom:16 }}>
+                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
+                <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+                  placeholder="At least 6 characters" required minLength={6} style={inputStyle}/>
+              </div>
+
+              <button type="submit" disabled={loading} style={{
+                width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8,
+                padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
+              }}>
+                {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
+              </button>
+            </form>
+
+            <div style={{ marginTop:12, fontSize:12, color:"#64748B" }}>
+              {isLogin ? "No account yet? " : "Already have an account? "}
+              <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
+                background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
+              }}>
+                {isLogin ? "Create one" : "Sign in"}
+              </button>
             </div>
+          </section>
+        </section>
 
-            <div style={{ marginBottom:16 }}>
-              <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
-                placeholder="At least 6 characters" required minLength={6} style={inputStyle}/>
+        <section id="pricing" style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:14, flexWrap:"wrap", marginBottom:14 }}>
+            <div>
+              <h2 style={{ fontSize:30, margin:"0 0 6px", color:"#0F172A", letterSpacing:"-0.02em" }}>Simple pricing that scales with your search</h2>
+              <p style={{ fontSize:14, color:"#64748B", margin:0 }}>Start free. Upgrade when you need higher throughput and premium workflows.</p>
             </div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <div style={{ display:"inline-flex", border:"1px solid #D0D7E2", borderRadius:999, overflow:"hidden" }}>
+                <button onClick={()=>setBillingCycle("monthly")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:billingCycle==="monthly"?"#2457D6":"#fff", color:billingCycle==="monthly"?"#fff":"#334155", cursor:"pointer" }}>Monthly</button>
+                <button onClick={()=>setBillingCycle("yearly")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:billingCycle==="yearly"?"#2457D6":"#fff", color:billingCycle==="yearly"?"#fff":"#334155", cursor:"pointer" }}>Yearly</button>
+              </div>
+              <div style={{ display:"inline-flex", border:"1px solid #D0D7E2", borderRadius:999, overflow:"hidden" }}>
+                <button onClick={()=>setCurrency("USD")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:currency==="USD"?"#2457D6":"#fff", color:currency==="USD"?"#fff":"#334155", cursor:"pointer" }}>USD</button>
+                <button onClick={()=>setCurrency("CAD")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:currency==="CAD"?"#2457D6":"#fff", color:currency==="CAD"?"#fff":"#334155", cursor:"pointer" }}>CAD</button>
+              </div>
+            </div>
+          </div>
 
-            <button type="submit" disabled={loading} style={{
-              width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8,
-              padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
-            }}>
-              {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
-            </button>
-          </form>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:12 }}>
+            {pricing[currency][billingCycle].map((plan) => (
+              <div key={plan.name} style={{ border:"1px solid #DCE4F2", borderRadius:12, padding:16, background:plan.name==="Pro"?"#F4F8FF":"#fff" }}>
+                <div style={{ fontSize:12, fontWeight:800, color:"#5C6B8A", letterSpacing:"0.05em", marginBottom:8 }}>{plan.name.toUpperCase()}</div>
+                <div style={{ fontSize:34, fontWeight:800, color:"#0F172A", lineHeight:1 }}>
+                  {plan.price === 0 ? "Free" : `${currency === "USD" ? "$" : "C$"}${plan.price}`}
+                </div>
+                <div style={{ fontSize:12, color:"#64748B", marginTop:6, minHeight:34 }}>
+                  {plan.price === 0 ? "No credit card required" : `${currency}/${billingCycle === "monthly" ? "mo" : "mo billed yearly"}`}
+                </div>
+                <p style={{ fontSize:13, color:"#475569", lineHeight:1.55, margin:"8px 0 12px" }}>{plan.sub}</p>
+                <ul style={{ margin:"0 0 12px 16px", padding:0, color:"#334155", lineHeight:1.6, fontSize:12 }}>
+                  <li>Job search and tracker workflow</li>
+                  <li>Document upload and management</li>
+                  <li>{plan.name === "Free" ? "Weekly tailoring limits" : "Higher or unlimited tailoring usage"}</li>
+                </ul>
+                <button onClick={()=>setIsLogin(plan.name === "Free" ? false : true)} style={{ width:"100%", background:plan.name==="Pro"?"#2457D6":"#fff", color:plan.name==="Pro"?"#fff":"#2457D6", border:plan.name==="Pro"?"none":"1px solid #BCD0FA", borderRadius:8, padding:"9px 11px", fontWeight:700, cursor:"pointer" }}>
+                  {plan.name === "Free" ? "Start free" : "Get started"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <div style={{ marginTop:12, fontSize:12, color:"#64748B" }}>
-            {isLogin ? "No account yet? " : "Already have an account? "}
-            <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
-              background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
-            }}>
-              {isLogin ? "Create one" : "Sign in"}
-            </button>
+        <section id="faq" style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
+          <h3 style={{ margin:"0 0 12px", fontSize:24, color:"#0F172A" }}>You&apos;ve got questions. We&apos;ve got answers.</h3>
+          <div style={{ display:"grid", gap:10 }}>
+            {[
+              ["Do I have to pay to use the app?", "No. You can use core job search, tracking, and document features on the Free plan."],
+              ["When should I upgrade?", "Upgrade when you hit free tailoring limits or need more throughput for active application cycles."],
+              ["Can I manage my subscription in-app?", "Yes. Premium users can manage billing from the dashboard subscription controls."],
+            ].map(([q,a]) => (
+              <div key={q} style={{ border:"1px solid #E2E8F0", borderRadius:10, padding:"10px 12px", background:"#FCFDFF" }}>
+                <div style={{ fontSize:13, fontWeight:800, color:"#1E293B", marginBottom:4 }}>{q}</div>
+                <div style={{ fontSize:13, color:"#475569", lineHeight:1.55 }}>{a}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:14, fontSize:13, color:"#64748B" }}>
+            Need help now? <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ color:"#2457D6", fontWeight:700 }}>Contact support</a>
           </div>
         </section>
       </main>
