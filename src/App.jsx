@@ -6,11 +6,11 @@ import { getSupabaseClient } from "./supabase";
 // APP THEME
 // ═══════════════════════════════════════════════════════════════════════════════
 const T = {
-  bg: "#F7F9FC", surface: "#FFFFFF",
-  border: "#E2E8F0", borderFocus: "#3B6FE8",
-  primary: "#3B6FE8", primaryDark: "#2854C5",
+  bg: "var(--bg)", surface: "var(--surface)",
+  border: "var(--border)", borderFocus: "var(--accent)",
+  primary: "var(--accent)", primaryDark: "var(--accent-hover)",
   primaryLight: "#EEF3FD", primaryMid: "#C7D8FA",
-  text: "#1A1F2E", textSub: "#5A6480", textMute: "#9AA3BA",
+  text: "var(--text-primary)", textSub: "var(--text-secondary)", textMute: "var(--text-tertiary)",
   green: "#16A34A", greenBg: "#F0FDF4", greenBorder: "#BBF7D0",
   amber: "#B45309", amberBg: "#FFFBEB", amberBorder: "#FDE68A",
   red: "#DC2626", redBg: "#FEF2F2", redBorder: "#FECACA",
@@ -1475,15 +1475,12 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
 
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <div style={{padding:"28px 32px",maxWidth:920,margin:"0 auto"}}>
-        <div style={{marginBottom:22}}>
-          <h1 style={{margin:0,fontSize:21,fontWeight:800,color:T.text,letterSpacing:"-0.3px"}}>Profile</h1>
-          <p style={{margin:"4px 0 0",fontSize:13,color:T.textSub}}>Personal info, job preferences, and documents</p>
-        </div>
+      <PH title="Profile" subtitle="Personal info, job preferences, and documents."/>
+      <div style={{padding:"12px 28px 28px",maxWidth:1040,margin:"0 auto"}}>
 
         {profileError&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}>{profileError}</div>}
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:18,marginBottom:18}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:14,marginBottom:14}}>
           <Card>
             <SH icon="👤" title="Personal Info"/>
             {renderField("Full Name","name","Jane Smith")}
@@ -1538,7 +1535,7 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
           </Card>
         </div>
 
-        <Card style={{marginBottom:18}}>
+        <Card style={{marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
             <SH icon="🏢" title="Company & Culture Preferences"/>
             <Toggle checked={!!profile.useCompanyPrefs} onChange={v=>up("useCompanyPrefs",v)}
@@ -1557,7 +1554,7 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
           {!profile.useCompanyPrefs&&<div style={{marginTop:10,fontSize:12,color:T.textMute,background:T.bg,borderRadius:8,padding:"8px 12px",border:`1px solid ${T.border}`}}>💡 Toggle on to include these preferences in searches and suggestions.</div>}
         </Card>
 
-        <div style={{marginBottom:24}}>
+        <div style={{marginBottom:18}}>
           <Btn onClick={save} variant={savedMsg?"success":"primary"} disabled={savingProfile}>
             {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save Profile Defaults"}
           </Btn>
@@ -1728,8 +1725,8 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
 
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Job Search" subtitle="LinkedIn-style search flow: search, filter, pick a role, then save."/>
-      <div style={{padding:"16px 24px 24px",maxWidth:1240,margin:"0 auto"}}>
+      <PH title="Job Search" subtitle="Search roles, apply filters, preview details, then save to Tracker."/>
+      <div style={{padding:"12px 28px 28px",maxWidth:1240,margin:"0 auto"}}>
         <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr auto",gap:10,marginBottom:10}}>
           <TitleAutocomplete value={query} onChange={setQuery} placeholder='e.g. customer success, account manager, frontend engineer' compact
             onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
@@ -1764,9 +1761,9 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
           </div>
         )}
 
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1.2fr",gap:12,minHeight:520}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1.2fr",gap:12,minHeight:560}}>
           <Card style={{padding:0,overflow:"hidden"}}>
-            <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,background:"#1865B7",color:"#fff"}}>
+            <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(135deg, var(--accent), #818CF8)",color:"#fff"}}>
               <div style={{fontSize:14,fontWeight:700}}>{query || profileTitle || "Search"} in {searchLocation || "Any location"}</div>
               <div style={{fontSize:12,opacity:0.9}}>{results.length} result{results.length===1?"":"s"}</div>
             </div>
@@ -1776,7 +1773,7 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
                   <span>Run a search to see job matches.</span>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                     <Btn small variant="secondary" onClick={search}>Search with defaults</Btn>
-                    {jobs.length > 0 ? <Btn small variant="ghost" onClick={()=>onNavigate?.("tracker")}>Go to Saved Jobs</Btn> : null}
+                    {jobs.length > 0 ? <Btn small variant="ghost" onClick={()=>onNavigate?.("tracker")}>Go to Tracker</Btn> : null}
                   </div>
                 </div>
               )}
@@ -1806,8 +1803,9 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
               const saving = savingJobKey === jobKey;
               return (
                 <>
-                  <div style={{fontSize:14,color:T.textSub,marginBottom:8}}>{selectedJob.company}</div>
-                  <h2 style={{margin:"0 0 8px",fontSize:42,lineHeight:1.05,color:T.text,letterSpacing:"-0.7px"}}>{selectedJob.title}</h2>
+                  <div style={{fontSize:13,color:T.textSub,marginBottom:8}}>Company</div>
+                  <div style={{fontSize:22,fontWeight:800,lineHeight:1.2,color:T.text,letterSpacing:"-0.3px",marginBottom:4}}>{selectedJob.title}</div>
+                  <div style={{fontSize:15,color:T.text,fontWeight:700,marginBottom:4}}>{selectedJob.company}</div>
                   <div style={{fontSize:16,color:T.textSub,marginBottom:12}}>{selectedJob.location}</div>
                   <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
                     <Chip label={workMode === "all" ? "Any work mode" : workMode} color={T.teal} />
@@ -2120,7 +2118,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
 
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
-      <PH title="Saved Jobs" subtitle={`${jobs.length} job${jobs.length!==1?"s":""} tracked`}
+      <PH title="Application Tracker" subtitle={`${jobs.length} job${jobs.length!==1?"s":""} tracked`}
         action={
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             <Btn onClick={()=>setShowAddJobModal(true)} variant="secondary">+ Add Job</Btn>
@@ -2128,7 +2126,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
           </div>
         }/>
 
-      <div style={{padding:"14px 32px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0,maxWidth:1180,margin:"0 auto",width:"100%"}}>
+      <div style={{padding:"8px 28px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0,maxWidth:1180,margin:"0 auto",width:"100%"}}>
         {[["all",`All (${jobs.length})`],...STATUS_OPTIONS.map(s=>[s,`${STATUS_META[s].label} (${counts[s]||0})`])].map(([val,lbl])=>(
           <button key={val} onClick={()=>setFilterStatus(val)} style={{
             padding:"5px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,transition:"all 0.12s",
@@ -2146,7 +2144,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
       </div>
 
       {(trackerErr || trackerMsg) && (
-        <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
+        <div style={{padding:"10px 28px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
           <div style={{
             fontSize:12,
             borderRadius:8,
@@ -2160,7 +2158,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
         </div>
       )}
 
-      <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
+      <div style={{padding:"10px 28px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
         <div style={{fontSize:12,color:T.textSub}}>
           Weekly Limit: <strong style={{color:T.text}}>
             {premiumActive ? "Unlimited" : (quota.remaining ?? 0)}
@@ -2170,7 +2168,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
         </div>
       </div>
 
-      <div style={{flex:1,overflow:"auto",padding:"12px 32px 24px",maxWidth:1180,margin:"0 auto",width:"100%"}}>
+      <div style={{flex:1,overflow:"auto",padding:"12px 28px 24px",maxWidth:1180,margin:"0 auto",width:"100%"}}>
         {filtered.length===0&&(
           <div style={{textAlign:"center",padding:"60px 0",color:T.textMute}}>
             <div style={{fontSize:36,marginBottom:10}}>📭</div>
@@ -2212,7 +2210,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
               </div>
             </Card>
 
-            <Card>
+            <Card style={{maxHeight:"70vh",overflowY:"auto"}}>
               {(() => {
                 const job = selectedTrackerJob;
                 return (
@@ -2404,8 +2402,8 @@ function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, b
   const premiumActive = isPremiumSubscription(subscription);
   return (
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Settings & Billing" subtitle="Manage account and subscription in one place."/>
-      <div style={{padding:"16px 32px 30px",maxWidth:980,margin:"0 auto",display:"grid",gap:12}}>
+      <PH title="Settings & Billing" subtitle="Manage your account profile and subscription."/>
+      <div style={{padding:"12px 28px 28px",maxWidth:980,margin:"0 auto",display:"grid",gap:12}}>
         <Card>
           <SH icon="👤" title="Account"/>
           <div style={{fontSize:13,color:T.textSub}}>Signed in as <strong style={{color:T.text}}>{userName}</strong></div>
@@ -2431,6 +2429,11 @@ function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, b
             )}
           </div>
           {billingError ? <div style={{marginTop:8,fontSize:12,color:T.red}}>{billingError}</div> : null}
+        </Card>
+        <Card>
+          <SH icon="🛟" title="Support"/>
+          <div style={{fontSize:13,color:T.textSub,marginBottom:10}}>Need help with billing or account access?</div>
+          <a href={`mailto:${FEEDBACK_EMAIL}`} style={{fontSize:13,fontWeight:700,color:T.primary}}>Contact support</a>
         </Card>
       </div>
     </div>
@@ -2460,76 +2463,84 @@ function AppShell({
     tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs} subscription={subscription} onNavigate={setActive}/>,
     settings:  <SettingsView  subscription={subscription} onUpgrade={onUpgrade} onManageBilling={onManageBilling} billingBusy={billingBusy} billingError={billingError} userName={userName} />,
   };
+  const activeMeta = nav.find((n)=>n.id===active) || nav[0];
   const flow = [
     { id: "profile", label: "Profile Defaults", done: !!((profile?.targetTitle || "").trim() && ((profile?.targetLocation || "").trim() || (profile?.location || "").trim())) },
     { id: "search", label: "Job Search", done: jobs.length > 0 },
-    { id: "tracker", label: "Saved Jobs", done: jobs.some((j)=>j.status === "tailored" || j.tailoredResume || j.tailoredCover) },
+    { id: "tracker", label: "Tracker", done: jobs.some((j)=>j.status === "tailored" || j.tailoredResume || j.tailoredCover) },
   ];
   const nextStep = flow.find((s)=>!s.done);
 
   return(
-    <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-      <aside style={{width:224,background:`linear-gradient(180deg,${T.surface} 0%,#F8FAFF 100%)`,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,padding:"18px 12px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 10px 16px",marginBottom:8,borderBottom:`1px solid ${T.border}`}}>
-          <div style={{width:32,height:32,borderRadius:10,flexShrink:0,background:`linear-gradient(135deg,${T.primary},#0891b2)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",boxShadow:"0 10px 18px rgba(59,111,232,0.28)"}}>J</div>
-          <div style={{fontSize:13,fontWeight:800,color:T.text,lineHeight:1.2,letterSpacing:"0.01em"}}>Job<br/>Assistant</div>
+    <div style={{display:"flex",minHeight:"100vh",background:"var(--bg)"}}>
+      <aside style={{width:280,background:T.surface,borderRight:"1px solid var(--border-light)",display:"flex",flexDirection:"column",flexShrink:0}}>
+        <div style={{padding:"28px 24px 20px",borderBottom:"1px solid var(--border-light)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:40,height:40,borderRadius:11,background:"linear-gradient(135deg, var(--accent), #818CF8)",display:"grid",placeItems:"center",fontFamily:"Sora, DM Sans, sans-serif",fontSize:18,fontWeight:700,color:"#fff",boxShadow:"0 4px 12px -2px rgba(99, 102, 241, 0.25)"}}>
+              J
+            </div>
+            <div style={{fontFamily:"Sora, DM Sans, sans-serif",fontSize:17,fontWeight:600,color:T.text}}>Job Assistant</div>
+          </div>
         </div>
-        <nav style={{display:"flex",flexDirection:"column",gap:4,marginTop:6,flex:1}}>
+        <nav style={{display:"flex",flexDirection:"column",gap:6,padding:"22px 14px",flex:1,overflowY:"auto"}}>
           {nav.map(n=>(
             <button key={n.id} onClick={()=>{ if(!n.disabled) setActive(n.id); }} title={n.disabled ? "Coming soon" : n.label} style={{
-              display:"flex",alignItems:"center",gap:10,padding:"10px 11px",borderRadius:10,border:"none",
-              cursor:n.disabled?"not-allowed":"pointer",width:"100%",background:active===n.id?T.primaryLight:"transparent",
-              color:n.disabled?T.textMute:(active===n.id?T.primary:T.textSub),fontFamily:"inherit",fontSize:13,
-              fontWeight:active===n.id?700:560,transition:"all 0.12s",textAlign:"left"
+              display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:10,border:"none",
+              cursor:n.disabled?"not-allowed":"pointer",width:"100%",background:active===n.id?"linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(129, 140, 248, 0.06))":"transparent",
+              color:n.disabled?T.textMute:(active===n.id?T.primary:T.textSub),fontFamily:"inherit",fontSize:14,
+              fontWeight:active===n.id?650:540,transition:"all 0.15s",textAlign:"left",position:"relative"
             }} disabled={n.disabled}>
-              <span style={{fontSize:15,flexShrink:0,width:22,height:22,display:"grid",placeItems:"center",background:active===n.id?"#FFFFFF":"transparent",borderRadius:7,border:active===n.id?`1px solid ${T.primaryMid}`:"1px solid transparent"}}>{n.icon}</span>
+              {active===n.id ? <span style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:24,background:T.primary,borderRadius:"0 2px 2px 0"}}/> : null}
+              <span style={{fontSize:16,opacity:active===n.id?1:0.75}}>{n.icon}</span>
               <span style={{flex:1}}>{n.label}</span>
-              {n.disabled && <span style={{fontSize:10,fontWeight:700,color:T.textMute}}>Coming Soon</span>}
-              {active===n.id&&<div style={{width:6,height:6,borderRadius:"50%",background:T.primary,flexShrink:0}}/>}
+              {n.disabled && <span style={{fontSize:10,fontWeight:700,color:T.textMute,background:"#F8FAFC",border:`1px solid ${T.border}`,padding:"2px 7px",borderRadius:8}}>Soon</span>}
             </button>
           ))}
         </nav>
-        <div style={{borderTop:`1px solid ${T.border}`,paddingTop:12,marginTop:6}}>
-          <div style={{fontSize:11,color:T.textMute,padding:"0 10px 8px",fontWeight:700,letterSpacing:"0.03em"}}>
-            PLAN · {isPremiumSubscription(subscription) ? "PREMIUM" : "FREE"}
+        <div style={{padding:"16px 20px 20px",borderTop:"1px solid var(--border-light)"}}>
+          <div style={{background:"linear-gradient(135deg, var(--primary), var(--primary-light))",padding:16,borderRadius:12,color:"#fff",marginBottom:10}}>
+            <div style={{fontSize:11,fontWeight:700,opacity:0.75,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:5}}>Plan</div>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:10}}>{isPremiumSubscription(subscription) ? "Premium Active" : "Free Plan"}</div>
+            <button
+              onClick={isPremiumSubscription(subscription) ? onManageBilling : onUpgrade}
+              disabled={billingBusy}
+              style={{
+                width:"100%",padding:"9px 10px",background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.24)",
+                color:"#fff",borderRadius:8,fontSize:12,fontWeight:600,cursor:billingBusy?"not-allowed":"pointer",fontFamily:"inherit"
+              }}
+            >
+              {billingBusy ? "Working..." : isPremiumSubscription(subscription) ? "Manage Subscription" : "Upgrade to Premium"}
+            </button>
           </div>
-          <button
-            onClick={isPremiumSubscription(subscription) ? onManageBilling : onUpgrade}
-            disabled={billingBusy}
-            style={{
-              display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 10px",
-              borderRadius:10,border:`1px solid ${T.border}`,cursor:billingBusy?"not-allowed":"pointer",width:"100%",
-              background:isPremiumSubscription(subscription)?T.surface:T.primary,
-              color:isPremiumSubscription(subscription)?T.textSub:"#fff",fontFamily:"inherit",fontSize:12,fontWeight:700,marginBottom:8
-            }}
-          >
-            {billingBusy ? "Working..." : isPremiumSubscription(subscription) ? "Manage subscription" : "Upgrade to premium"}
-          </button>
           {billingError ? (
-            <div style={{fontSize:11,color:T.red,padding:"0 10px 8px",lineHeight:1.4}}>{billingError}</div>
+            <div style={{fontSize:11,color:T.red,padding:"0 6px 8px",lineHeight:1.4}}>{billingError}</div>
           ) : null}
-          <div style={{fontSize:12,color:T.textSub,padding:"5px 10px 9px",fontWeight:600}}>
-            Signed in as {userName}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 6px 0"}}>
+            <div style={{fontSize:12,color:T.textMute,fontWeight:600,maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{userName}</div>
+            <button onClick={onLogout} style={{border:"none",background:"transparent",color:T.textMute,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+              Sign out
+            </button>
           </div>
-          <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 10px",borderRadius:10,border:"none",cursor:"pointer",width:"100%",background:"transparent",color:T.textMute,fontFamily:"inherit",fontSize:12,fontWeight:600,transition:"all 0.12s",textAlign:"left"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=T.redBg;e.currentTarget.style.color=T.red;}}
-            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMute;}}>
-            <span style={{fontSize:14}}>→</span> Sign out
-          </button>
         </div>
       </aside>
-      <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:`radial-gradient(circle at 0% 0%,#FFFFFF 0%,${T.bg} 55%)`}}>
-        {nextStep ? (
-          <div style={{padding:"10px 24px 0",flexShrink:0}}>
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 10px",display:"flex",alignItems:"center",gap:8,justifyContent:"space-between"}}>
-              <div style={{fontSize:12,color:T.textSub}}>
-                Next step: <strong style={{color:T.text}}>{nextStep.label}</strong>
-              </div>
-              <Btn small onClick={()=>setActive(nextStep.id)}>Continue</Btn>
+      <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,height:"100vh"}}>
+        <header style={{background:T.surface,borderBottom:"1px solid var(--border-light)",padding:"16px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:40}}>
+          <div>
+            <div style={{fontSize:20,fontWeight:700,color:T.text,fontFamily:"Sora, DM Sans, sans-serif"}}>{activeMeta.label}</div>
+            <div style={{fontSize:12,color:T.textSub}}>
+              {nextStep ? `Next: ${nextStep.label}` : "All core setup complete"}
             </div>
           </div>
-        ) : null}
-        {views[active]}
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textMute,border:`1px solid ${T.border}`,borderRadius:999,padding:"4px 10px"}}>
+              {isPremiumSubscription(subscription) ? "Premium" : "Free"}
+            </span>
+            {nextStep ? <Btn small onClick={()=>setActive(nextStep.id)}>Continue</Btn> : null}
+          </div>
+        </header>
+        <div style={{flex:1,overflow:"hidden",background:"radial-gradient(circle at 0% 0%, #FFFFFF 0%, var(--bg) 55%)"}}>
+          {views[active]}
+        </div>
       </main>
     </div>
   );
@@ -2668,12 +2679,6 @@ export default function App(){
   if(!loggedIn){
     return(
       <>
-        <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
-          *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-          body{font-family:'Outfit',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
-          input::placeholder{color:#94A3B8;}
-        `}</style>
         <LandingPage onLogin={async (name, id)=>{
           setUserName(name);
           setUserId(id || "");
@@ -2687,23 +2692,6 @@ export default function App(){
 
   return(
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
-        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-        body{background:${T.bg};color:${T.text};font-family:'DM Sans',system-ui,sans-serif;}
-        ::-webkit-scrollbar{width:5px;height:5px;}
-        ::-webkit-scrollbar-track{background:${T.bg};}
-        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:99px;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        select option{background:${T.surface};color:${T.text};}
-        button,input,textarea,select{font-family:'DM Sans',system-ui,sans-serif;}
-        a{color:${T.primary};}
-        button:not(:disabled):hover{opacity:0.9;transform:translateY(-1px);}
-        button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{
-          outline:2px solid ${T.primaryMid};
-          outline-offset:2px;
-        }
-      `}</style>
       <AppShell docs={docs} setDocs={setDocs} jobs={jobs} setJobs={setJobs}
         userName={userName}
         onLogout={handleLogout}
