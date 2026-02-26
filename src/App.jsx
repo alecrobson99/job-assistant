@@ -1709,6 +1709,12 @@ function TrackerView({jobs,setJobs,docs,subscription}){
   const [tailorLoading,setTailorLoading]=useState(false);
   const [quota,setQuota]=useState({ weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null });
   const [downloadFormatByJob,setDownloadFormatByJob]=useState({});
+  const [showAddJobModal,setShowAddJobModal]=useState(false);
+  const [addingJob,setAddingJob]=useState(false);
+  const [newJobUrl,setNewJobUrl]=useState("");
+  const [newJobTitle,setNewJobTitle]=useState("");
+  const [newJobCompany,setNewJobCompany]=useState("");
+  const [newJobLocation,setNewJobLocation]=useState("");
   const premiumActive = isPremiumSubscription(subscription);
 
   async function updateStatus(id,status){
@@ -1760,6 +1766,77 @@ function TrackerView({jobs,setJobs,docs,subscription}){
       downloadTailoredArtifact(job, type, format);
     } catch (e) {
       setTrackerErr(`Download failed: ${e.message || e}`);
+    }
+  }
+
+  function toTitleCase(value) {
+    return String(value || "")
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+
+  function inferJobFromUrl(raw) {
+    try {
+      const parsed = new URL(raw.trim());
+      const host = parsed.hostname.replace(/^www\./i, "");
+      const companyBase = host.split(".")[0].replace(/[-_]+/g, " ");
+      const company = toTitleCase(companyBase) || "Unknown Company";
+
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      const last = segments[segments.length - 1] || "";
+      const title = toTitleCase(decodeURIComponent(last).replace(/[-_]+/g, " ")) || "Untitled Role";
+      return { title, company };
+    } catch {
+      return { title: "", company: "" };
+    }
+  }
+
+  async function addJobFromUrl() {
+    setTrackerErr("");
+    const trimmedUrl = newJobUrl.trim();
+    if (!trimmedUrl) {
+      setTrackerErr("Job URL is required.");
+      return;
+    }
+
+    let validUrl = trimmedUrl;
+    if (!/^https?:\/\//i.test(validUrl)) {
+      validUrl = `https://${validUrl}`;
+    }
+
+    try {
+      new URL(validUrl);
+    } catch {
+      setTrackerErr("Please enter a valid job URL.");
+      return;
+    }
+
+    setAddingJob(true);
+    try {
+      const inferred = inferJobFromUrl(validUrl);
+      const saved = await store.insertJob({
+        title: newJobTitle.trim() || inferred.title || "Untitled Role",
+        company: newJobCompany.trim() || inferred.company || "Unknown Company",
+        location: newJobLocation.trim() || "Not specified",
+        description: "",
+        url: validUrl,
+        status: "saved",
+        notes: "",
+      });
+      setJobs((prev) => [saved, ...prev]);
+      setShowAddJobModal(false);
+      setNewJobUrl("");
+      setNewJobTitle("");
+      setNewJobCompany("");
+      setNewJobLocation("");
+      setTrackerMsg("Job added to tracker.");
+      setTimeout(()=>setTrackerMsg(""),1500);
+    } catch (e) {
+      setTrackerErr(`Could not add job: ${e.message || e}`);
+    } finally {
+      setAddingJob(false);
     }
   }
 
@@ -1857,7 +1934,12 @@ function TrackerView({jobs,setJobs,docs,subscription}){
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
       <PH title="Application Tracker" subtitle={`${jobs.length} application${jobs.length!==1?"s":""} tracked`}
-        action={<Btn onClick={()=>exportCSV(jobs,docs)} variant="ghost">↓ Export CSV</Btn>}/>
+        action={
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Btn onClick={()=>setShowAddJobModal(true)} variant="secondary">+ Add Job</Btn>
+            <Btn onClick={()=>exportCSV(jobs,docs)} variant="ghost">↓ Export CSV</Btn>
+          </div>
+        }/>
 
       <div style={{padding:"14px 32px 0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0,maxWidth:1180,margin:"0 auto",width:"100%"}}>
         {[["all",`All (${jobs.length})`],...STATUS_OPTIONS.map(s=>[s,`${STATUS_META[s].label} (${counts[s]||0})`])].map(([val,lbl])=>(
@@ -2032,6 +2114,57 @@ function TrackerView({jobs,setJobs,docs,subscription}){
               <Btn variant="ghost" onClick={()=>setTailorModalJobId(null)} disabled={tailorLoading}>Cancel</Btn>
               <Btn onClick={generateTailoredApplication} disabled={tailorLoading || (!premiumActive && quota.remaining <= 0)}>
                 {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Generate tailored application"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddJobModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"grid",placeItems:"center",zIndex:50,padding:20}}>
+          <div style={{width:"100%",maxWidth:620,background:"#fff",borderRadius:12,border:`1px solid ${T.border}`,padding:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:T.text}}>Add Job by URL</div>
+                <div style={{fontSize:12,color:T.textSub}}>Paste a job listing URL to create a tracker tile.</div>
+              </div>
+              <button onClick={()=>setShowAddJobModal(false)} style={{border:"none",background:"transparent",fontSize:20,cursor:"pointer",color:T.textMute}}>×</button>
+            </div>
+
+            <div style={{display:"grid",gap:10}}>
+              <div>
+                <FL>Job URL</FL>
+                <AppInput
+                  value={newJobUrl}
+                  onChange={(v)=>setNewJobUrl(v)}
+                  onBlur={() => {
+                    const inferred = inferJobFromUrl(newJobUrl);
+                    if (!newJobTitle && inferred.title) setNewJobTitle(inferred.title);
+                    if (!newJobCompany && inferred.company) setNewJobCompany(inferred.company);
+                  }}
+                  placeholder="https://example.com/jobs/role"
+                />
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <FL>Job Title (optional)</FL>
+                  <AppInput value={newJobTitle} onChange={(v)=>setNewJobTitle(v)} placeholder="e.g. Account Executive" />
+                </div>
+                <div>
+                  <FL>Company (optional)</FL>
+                  <AppInput value={newJobCompany} onChange={(v)=>setNewJobCompany(v)} placeholder="e.g. Stripe" />
+                </div>
+              </div>
+              <div>
+                <FL>Location (optional)</FL>
+                <AppInput value={newJobLocation} onChange={(v)=>setNewJobLocation(v)} placeholder="e.g. Toronto, ON or Remote" />
+              </div>
+            </div>
+
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
+              <Btn variant="ghost" onClick={()=>setShowAddJobModal(false)} disabled={addingJob}>Cancel</Btn>
+              <Btn onClick={addJobFromUrl} disabled={addingJob}>
+                {addingJob ? <><Spinner color="#fff"/> Adding…</> : "Add Job"}
               </Btn>
             </div>
           </div>
