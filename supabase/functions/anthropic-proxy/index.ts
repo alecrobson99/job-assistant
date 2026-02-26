@@ -12,15 +12,6 @@ type ProxyPayload = {
   messages?: Array<{ role: string; content: unknown }>;
 };
 
-function isPaidSubscription(subscription: { status?: string | null; has_premium?: boolean | null; tier?: string | null } | null) {
-  if (!subscription) return false;
-  if (subscription.has_premium === true) return true;
-  const tier = String(subscription.tier || "").toLowerCase();
-  if (tier === "premium" || tier === "pro") return true;
-  const status = String(subscription.status || "").toLowerCase();
-  return status === "active" || status === "trialing";
-}
-
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -95,20 +86,11 @@ serve(async (req) => {
 
     const { data: subscription, error: subErr } = await adminClient
       .from("billing_subscriptions")
-      .select("status,tier")
+      .select("status")
       .eq("user_id", user.id)
       .maybeSingle();
     if (subErr && subErr.code !== "PGRST116") {
       throw subErr;
-    }
-
-    const { data: entitlements, error: entErr } = await adminClient
-      .from("user_entitlements")
-      .select("has_premium,tier")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (entErr && entErr.code !== "PGRST116" && entErr.code !== "42P01") {
-      throw entErr;
     }
 
     // Plan enforcement:
@@ -119,9 +101,7 @@ serve(async (req) => {
     const usageType = body.usageType || "tailor";
     const shouldChargeUsage = usageType === "tailor";
 
-    const premiumActive =
-      isPaidSubscription(subscription ?? null) ||
-      isPaidSubscription(entitlements ?? null);
+    const premiumActive = String(subscription?.status || "").toLowerCase() === "active";
 
     if (!premiumActive && shouldChargeUsage) {
       const { error: quotaErr } = await userClient.rpc("consume_tailoring_use", {
