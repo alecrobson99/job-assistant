@@ -5,9 +5,10 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 type CheckoutPayload = {
   priceId?: string;
+  billingCycle?: "monthly" | "annual";
 };
 
-const PREMIUM_PRICE_ID = "price_1T4I2sBWU2sVjaR70RXgIZv1";
+const PREMIUM_MONTHLY_PRICE_ID = "price_1T4I2sBWU2sVjaR70RXgIZv1";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,10 +21,15 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
     const appUrl = Deno.env.get("APP_URL");
-    const envPremiumPriceId =
+    const monthlyPriceId =
+      Deno.env.get("STRIPE_PREMIUM_MONTHLY_PRICE_ID") ||
       Deno.env.get("STRIPE_PREMIUM_PRICE_ID") ||
       Deno.env.get("STRIPE_PRICE_ID") ||
-      PREMIUM_PRICE_ID;
+      PREMIUM_MONTHLY_PRICE_ID;
+    const annualPriceId =
+      Deno.env.get("STRIPE_PREMIUM_ANNUAL_PRICE_ID") ||
+      Deno.env.get("STRIPE_ANNUAL_PRICE_ID") ||
+      "";
 
     const missingEnv: string[] = [];
     if (!supabaseUrl) missingEnv.push("SUPABASE_URL");
@@ -116,12 +122,12 @@ serve(async (req) => {
     }
 
     const body = (await req.json().catch(() => ({}))) as CheckoutPayload;
-    const requestedPriceId = body.priceId || envPremiumPriceId;
-    if (envPremiumPriceId !== PREMIUM_PRICE_ID) {
-      throw new Error("Server premium price configuration does not match expected premium price id");
-    }
+    const cycle = body.billingCycle === "annual" ? "annual" : "monthly";
+    const fallbackPrice = cycle === "annual" && annualPriceId ? annualPriceId : monthlyPriceId;
+    const requestedPriceId = (body.priceId || fallbackPrice || "").trim();
+    const allowedPriceIds = [monthlyPriceId, annualPriceId].filter(Boolean);
 
-    if (requestedPriceId !== PREMIUM_PRICE_ID) {
+    if (!requestedPriceId || !allowedPriceIds.includes(requestedPriceId)) {
       return new Response(JSON.stringify({ error: "Invalid price for this checkout session" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -133,7 +139,7 @@ serve(async (req) => {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{ price: PREMIUM_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: requestedPriceId, quantity: 1 }],
       success_url: `${normalizedAppUrl}/billing/return?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${normalizedAppUrl}/pricing?canceled=1`,
       allow_promotion_codes: true,

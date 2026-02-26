@@ -29,7 +29,6 @@ const STATUS_META = {
 const STATUS_OPTIONS = ["saved","tailored","applied","interview","offer","rejected"];
 const FEEDBACK_EMAIL = "feedback@jobassistant.app";
 const WEEKLY_TAILOR_LIMIT = 7;
-const PREMIUM_PRICE_ID = "price_1T4I2sBWU2sVjaR70RXgIZv1";
 const LOCATION_OPTIONS = [
   "Remote",
   "Hybrid",
@@ -277,7 +276,7 @@ function LandingPage({ onLogin }) {
       ],
       yearly: [
         { name: "Free", price: 0, sub: "For individual job seekers getting started." },
-        { name: "Pro", price: 19.99, sub: "Billed annually. Save with higher usage." },
+        { name: "Pro", price: 89.99, sub: "Billed annually. Save with higher usage." },
       ],
     },
     CAD: {
@@ -287,7 +286,7 @@ function LandingPage({ onLogin }) {
       ],
       yearly: [
         { name: "Free", price: 0, sub: "For individual job seekers getting started." },
-        { name: "Pro", price: 19.99, sub: "Billed annually. Save with higher usage." },
+        { name: "Pro", price: 89.99, sub: "Billed annually. Save with higher usage." },
       ],
     },
   };
@@ -2401,6 +2400,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
 
 function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, billingError, userName }) {
   const premiumActive = isPremiumSubscription(subscription);
+  const [billingCycle, setBillingCycle] = useState("monthly");
   return (
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
       <PH title="Settings & Billing" subtitle="Manage your account profile and subscription."/>
@@ -2422,11 +2422,49 @@ function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, b
               {premiumActive ? "Premium" : "Free"}
             </span>
           </div>
+          {!premiumActive ? (
+            <div style={{display:"inline-flex",border:`1px solid ${T.border}`,borderRadius:999,overflow:"hidden",marginBottom:10}}>
+              <button
+                type="button"
+                onClick={()=>setBillingCycle("monthly")}
+                style={{
+                  border:"none",
+                  padding:"7px 12px",
+                  fontSize:12,
+                  fontWeight:700,
+                  fontFamily:"inherit",
+                  cursor:"pointer",
+                  background:billingCycle==="monthly" ? T.primary : "#fff",
+                  color:billingCycle==="monthly" ? "#fff" : T.textSub,
+                }}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={()=>setBillingCycle("annual")}
+                style={{
+                  border:"none",
+                  padding:"7px 12px",
+                  fontSize:12,
+                  fontWeight:700,
+                  fontFamily:"inherit",
+                  cursor:"pointer",
+                  background:billingCycle==="annual" ? T.primary : "#fff",
+                  color:billingCycle==="annual" ? "#fff" : T.textSub,
+                }}
+              >
+                Annually
+              </button>
+            </div>
+          ) : null}
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {premiumActive ? (
               <Btn onClick={onManageBilling} disabled={billingBusy}>{billingBusy ? "Working..." : "Manage billing"}</Btn>
             ) : (
-              <Btn onClick={onUpgrade} disabled={billingBusy}>{billingBusy ? "Working..." : "Upgrade to Premium"}</Btn>
+              <Btn onClick={()=>onUpgrade(billingCycle)} disabled={billingBusy}>
+                {billingBusy ? "Working..." : `Upgrade to Premium (${billingCycle === "annual" ? "Annually" : "Monthly"})`}
+              </Btn>
             )}
           </div>
           {billingError ? <div style={{marginTop:8,fontSize:12,color:T.red}}>{billingError}</div> : null}
@@ -2572,13 +2610,13 @@ export default function App(){
     }catch(e){console.error("Error loading data:",e);}
   }
 
-  async function handleUpgradeCheckout() {
+  async function handleUpgradeCheckout(billingCycle = "monthly") {
     setBillingBusy(true);
     setBillingError("");
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-        body: { priceId: PREMIUM_PRICE_ID },
+        body: { billingCycle },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Checkout URL was not returned.");
