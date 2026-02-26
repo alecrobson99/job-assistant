@@ -377,18 +377,41 @@ const isMissingRpcError = (error) => {
     msg.includes("schema cache")
   );
 };
-const needsOnboarding = (profile) => !((profile?.location || "").trim() && (profile?.targetTitle || "").trim());
+const isSessionError = (error) => {
+  const msg = String(error?.message || "").toLowerCase();
+  return (
+    msg.includes("invalid jwt") ||
+    msg.includes("invalid login credentials") ||
+    msg.includes("jwt expired") ||
+    msg.includes("refresh token") ||
+    msg.includes("session")
+  );
+};
 
 async function getAuthContext() {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.auth.getUser();
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
+  if (sessionError || !session?.access_token) {
+    await supabase.auth.signOut();
+    throw new Error("Your session expired. Please sign in again.");
+  }
+
+  const { data, error } = await supabase.auth.getUser();
   if (error) {
+    if (isSessionError(error)) {
+      await supabase.auth.signOut();
+      throw new Error("Your session expired. Please sign in again.");
+    }
     throw error;
   }
 
   if (!data.user) {
-    throw new Error("You are not logged in");
+    await supabase.auth.signOut();
+    throw new Error("Your session expired. Please sign in again.");
   }
 
   return { supabase, user: data.user };
@@ -1706,7 +1729,6 @@ export default function App(){
   const [subscription,setSubscription]=useState(null);
   const [billingBusy,setBillingBusy]=useState(false);
   const [billingError,setBillingError]=useState("");
-  const [showOnboarding,setShowOnboarding]=useState(false);
 
   // Load data from Supabase after login
   async function loadData(){
@@ -1807,36 +1829,10 @@ export default function App(){
       setProfileState({ name: "" });
       setSubscription(null);
       setUserId("");
-      setShowOnboarding(false);
       setUserName("");
       setLoggedIn(false);
       setBootstrappingAuth(false);
     }
-  }
-
-  useEffect(() => {
-    if (!loggedIn || !userId) return;
-    const key = `onboarding_done_${userId}`;
-    const done = localStorage.getItem(key) === "1";
-    setShowOnboarding(!done && needsOnboarding(profile));
-  }, [loggedIn, userId, profile]);
-
-  async function handleFinishOnboarding(updates) {
-    try {
-      const savedProfile = await store.setProfile({ ...profile, ...updates });
-      setProfileState((prev) => ({ ...prev, ...(savedProfile || updates) }));
-    } catch (e) {
-      console.error("Onboarding save failed:", e);
-      setProfileState((prev) => ({ ...prev, ...updates }));
-    } finally {
-      if (userId) localStorage.setItem(`onboarding_done_${userId}`, "1");
-      setShowOnboarding(false);
-    }
-  }
-
-  function handleSkipOnboarding() {
-    if (userId) localStorage.setItem(`onboarding_done_${userId}`, "1");
-    setShowOnboarding(false);
   }
 
   if (bootstrappingAuth) {
@@ -1867,10 +1863,6 @@ export default function App(){
         }}/>
       </>
     );
-  }
-
-  if (showOnboarding) {
-    return <OnboardingFlow profile={profile} onSave={handleFinishOnboarding} onSkip={handleSkipOnboarding} />;
   }
 
   return(
