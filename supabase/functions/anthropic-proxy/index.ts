@@ -15,6 +15,22 @@ function isPaidStatus(status?: string | null) {
   return status === "active" || status === "trialing";
 }
 
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function normalizeMessages(payload: ProxyPayload) {
+  if (Array.isArray(payload.messages) && payload.messages.length > 0) {
+    return payload.messages;
+  }
+  const userMsg = payload.userMsg?.trim();
+  if (!userMsg) return [];
+  return [{ role: "user", content: userMsg }];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -35,37 +51,31 @@ serve(async (req) => {
       throw new Error(`Missing required environment variables: ${missingEnv.join(", ")}`);
     }
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Always verify caller auth on server-side.
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const {
-      data: { user },
-      error: userErr,
-    } = await userClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (!user.email_confirmed_at) {
-      return new Response(JSON.stringify({ error: "Email verification required" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
+    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const accessToken = tokenMatch?.[1]?.trim() || null;
+    if (!accessToken) {
+      return jsonResponse({ error: "Missing Authorization header" }, 401);
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const {
+      data: { user },
+      error: userErr,
+    } = await adminClient.auth.getUser(accessToken);
+    if (userErr || !user) {
+      return jsonResponse({ error: userErr?.message || "Unauthorized" }, 401);
+    }
+
+    if (!user.email_confirmed_at) {
+      return jsonResponse({ error: "Email verification required" }, 403);
+    }
+
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    });
+
     const { data: subscription, error: subErr } = await adminClient
       .from("billing_subscriptions")
       .select("status")
@@ -78,32 +88,32 @@ serve(async (req) => {
     // Plan enforcement:
     // - Pro (active/trialing): allow request
     // - Free/unpaid: consume quota atomically server-side before expensive call
+    const body = (await req.json().catch(() => ({}))) as ProxyPayload;
+
     if (!isPaidStatus(subscription?.status ?? "inactive")) {
-      const bodyForQuota = (await req.clone().json().catch(() => ({}))) as ProxyPayload;
       const { error: quotaErr } = await userClient.rpc("consume_tailoring_use", {
-        p_job_id: bodyForQuota.jobId || null,
+        p_job_id: body.jobId || null,
       });
       if (quotaErr) {
         const msg = quotaErr.message || "";
         const status = msg.includes("WEEKLY_LIMIT_REACHED") ? 429 : 403;
-        return new Response(
-          JSON.stringify({
+        return jsonResponse(
+          {
             error: msg.includes("WEEKLY_LIMIT_REACHED")
               ? "Free usage limit reached. Upgrade to continue."
               : `Usage check failed: ${msg}`,
-          }),
-          {
-            status,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
           },
+          status,
         );
       }
     }
 
-    const body = (await req.json().catch(() => ({}))) as ProxyPayload;
     const model = body.model || "claude-sonnet-4-20250514";
     const maxTokens = body.maxTokens || 1500;
-    const messages = body.messages || [{ role: "user", content: body.userMsg || "" }];
+    const messages = normalizeMessages(body);
+    if (messages.length === 0) {
+      return jsonResponse({ error: "Missing prompt. Provide messages or userMsg." }, 400);
+    }
 
     const anthropicPayload: Record<string, unknown> = {
       model,
@@ -128,14 +138,11 @@ serve(async (req) => {
     const responseText = await anthropicRes.text();
 
     if (!anthropicRes.ok) {
-      return new Response(
-        JSON.stringify({
-          error: `Anthropic request failed (${anthropicRes.status}). ${responseText}`,
-        }),
+      return jsonResponse(
         {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          error: `Anthropic request failed (${anthropicRes.status}). ${responseText}`,
         },
+        500,
       );
     }
 
@@ -144,9 +151,6 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: (error as Error).message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: (error as Error).message }, 500);
   }
 });
