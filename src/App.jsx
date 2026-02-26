@@ -3,6 +3,10 @@ import { getSupabaseClient as createSupabaseClient } from "./supabase";
 
 const PREMIUM_PRICE_ID = "price_1T4I2sBWU2sVjaR70RXgIZv1";
 const FREE_PRICE_ID = "price_1T4I3DBWU2sVjaR7wBYD2vAR";
+const FREE_USAGE_LIMITS = {
+  starterSearches: 5,
+  roleFitChecks: 3,
+};
 
 const ROUTES = {
   landing: "/",
@@ -192,6 +196,59 @@ function useEntitlements(userId) {
   return { entitlements, loading, error, refresh };
 }
 
+function useFeatureUsage(userId, hasPremium) {
+  const [usage, setUsage] = useState({ starterSearches: 0, roleFitChecks: 0 });
+
+  useEffect(() => {
+    if (!userId) {
+      setUsage({ starterSearches: 0, roleFitChecks: 0 });
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(`job-assistant-usage:${userId}`);
+      if (!raw) {
+        setUsage({ starterSearches: 0, roleFitChecks: 0 });
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setUsage({
+        starterSearches: Number(parsed?.starterSearches || 0),
+        roleFitChecks: Number(parsed?.roleFitChecks || 0),
+      });
+    } catch {
+      setUsage({ starterSearches: 0, roleFitChecks: 0 });
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    window.localStorage.setItem(`job-assistant-usage:${userId}`, JSON.stringify(usage));
+  }, [usage, userId]);
+
+  const remaining = useCallback(
+    (feature) => {
+      if (hasPremium) return Infinity;
+      const limit = FREE_USAGE_LIMITS[feature] ?? 0;
+      return Math.max(0, limit - (usage[feature] ?? 0));
+    },
+    [hasPremium, usage]
+  );
+
+  const consume = useCallback(
+    (feature) => {
+      if (hasPremium) return true;
+      const limit = FREE_USAGE_LIMITS[feature] ?? 0;
+      const current = usage[feature] ?? 0;
+      if (current >= limit) return false;
+      setUsage((prev) => ({ ...prev, [feature]: (prev[feature] ?? 0) + 1 }));
+      return true;
+    },
+    [hasPremium, usage]
+  );
+
+  return { usage, remaining, consume };
+}
+
 function LoadingShell({ title = "Loading...", subtitle }) {
   return (
     <div className="screen center">
@@ -205,25 +262,46 @@ function LoadingShell({ title = "Loading...", subtitle }) {
 function LandingPage({ user, onStartFree, onSeePricing, onContinue }) {
   return (
     <div className="screen landing">
-      <div className="hero-card">
-        <p className="eyebrow">Job Assistant</p>
-        <h1>Land better roles faster with focused guidance.</h1>
-        <p className="hero-copy">
-          Start free in under a minute, personalize once, and get a practical first result immediately.
-        </p>
-        <div className="row">
-          {user ? (
-            <button className="btn primary" onClick={onContinue}>
-              Continue
+      <div className="hero-card hero-shell">
+        <div className="hero-content">
+          <p className="eyebrow">Job Assistant</p>
+          <h1>Apply with confidence, not guesswork.</h1>
+          <p className="hero-copy">
+            Get a focused job search workflow in minutes. Free users get core tools immediately. Upgrade only when
+            your limits are reached.
+          </p>
+          <div className="row">
+            {user ? (
+              <button className="btn primary" onClick={onContinue}>
+                Open dashboard
+              </button>
+            ) : (
+              <button className="btn primary" onClick={onStartFree}>
+                Create free account
+              </button>
+            )}
+            <button className="btn ghost" onClick={onSeePricing}>
+              Compare plans
             </button>
-          ) : (
-            <button className="btn primary" onClick={onStartFree}>
-              Start free
-            </button>
-          )}
-          <button className="btn ghost" onClick={onSeePricing}>
-            See pricing
-          </button>
+          </div>
+        </div>
+
+        <div className="hero-grid">
+          <div className="value-chip">
+            <p className="eyebrow">Free includes</p>
+            <h3>5 starter searches</h3>
+            <p>Plus onboarding, profile setup, and dashboard access at $0.</p>
+          </div>
+          <div className="value-chip">
+            <p className="eyebrow">When to upgrade</p>
+            <h3>Only at limits</h3>
+            <p>You keep full app access and get prompted only when free usage runs out.</p>
+          </div>
+          <div className="value-chip">
+            <p className="eyebrow">Premium</p>
+            <h3>Unlimited workflows</h3>
+            <p>Unlock unlimited actions and subscription controls in dashboard settings.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -289,6 +367,7 @@ function AuthPage({ onAuthed, onBackToLanding }) {
         if (!data.session) {
           setNotice("Account created. Confirm your email, then sign in.");
           setTab("login");
+          return;
         }
       }
 
@@ -669,27 +748,57 @@ function BillingReturnPage({ user, profile, entitlements, refreshEntitlements, o
   );
 }
 
-function AppHome({ user, profile, entitlements, onGoPricing, onSignOut }) {
-  const [firstActionState, setFirstActionState] = useState("");
+function AppHome({
+  user,
+  profile,
+  entitlements,
+  onGoPricing,
+  onSignOut,
+  onOpenBillingPortal,
+  portalLoading,
+  portalError,
+}) {
+  const [tab, setTab] = useState("workspace");
+  const [actionState, setActionState] = useState("");
+  const [upgradeState, setUpgradeState] = useState("");
   const [premiumActionState, setPremiumActionState] = useState("");
+  const hasPremium = Boolean(entitlements?.has_premium);
+  const { remaining, consume } = useFeatureUsage(user?.id, hasPremium);
 
   const name = profile?.name || user.user_metadata?.name || user.email?.split("@")[0] || "there";
   const targetTitle = profile?.target_title || "your target role";
   const location = profile?.location || "your preferred location";
   const searchRadius = profile?.search_radius_km ?? 25;
 
-  const runFirstAction = () => {
-    setFirstActionState(
-      `Prepared a starter search for ${targetTitle} in ${location} within ${searchRadius} km. Next: review and refine your matches.`
+  const runStarterSearch = () => {
+    if (!consume("starterSearches")) {
+      setUpgradeState("You reached your free Starter Search limit. Upgrade to continue.");
+      return;
+    }
+    const nextRemaining = hasPremium ? "Unlimited searches enabled." : `${Math.max(0, remaining("starterSearches") - 1)} free searches remaining.`;
+    setUpgradeState("");
+    setActionState(
+      `Search created for ${targetTitle} in ${location} within ${searchRadius} km. ${nextRemaining}`
     );
   };
 
+  const runRoleFitCheck = () => {
+    if (!consume("roleFitChecks")) {
+      setUpgradeState("You reached your free Role Fit Check limit. Upgrade for unlimited checks.");
+      return;
+    }
+    const nextRemaining = hasPremium ? "Unlimited checks enabled." : `${Math.max(0, remaining("roleFitChecks") - 1)} free checks remaining.`;
+    setUpgradeState("");
+    setActionState(`Role-fit score generated for ${targetTitle} against your profile. ${nextRemaining}`);
+  };
+
   const runPremiumAction = () => {
-    if (!entitlements?.has_premium) {
+    if (!hasPremium) {
+      setUpgradeState("Premium workflow is locked on Free. Upgrade to unlock it.");
       onGoPricing();
       return;
     }
-    setPremiumActionState("Premium action complete: generated a deeper tailored output draft for your profile.");
+    setPremiumActionState("Premium action complete: generated a tailored output draft for your profile.");
   };
 
   return (
@@ -697,7 +806,7 @@ function AppHome({ user, profile, entitlements, onGoPricing, onSignOut }) {
       <div className="panel app-panel">
         <div className="row spread align-start">
           <div>
-            <p className="eyebrow">Welcome back</p>
+            <p className="eyebrow">Dashboard</p>
             <h1>{name}</h1>
             <p className="muted">
               Targeting {targetTitle} in {location}
@@ -705,11 +814,11 @@ function AppHome({ user, profile, entitlements, onGoPricing, onSignOut }) {
           </div>
 
           <div className="row">
-            <button className="btn soft" onClick={onGoPricing}>
-              Pricing
+            <button className={`tab-mini ${tab === "workspace" ? "active" : ""}`} onClick={() => setTab("workspace")}>
+              Workspace
             </button>
-            <button className="btn soft" onClick={() => window.alert("Profile settings will be available here.")}>
-              Profile settings
+            <button className={`tab-mini ${tab === "settings" ? "active" : ""}`} onClick={() => setTab("settings")}>
+              Settings
             </button>
             <button className="btn ghost" onClick={onSignOut}>
               Sign out
@@ -717,35 +826,100 @@ function AppHome({ user, profile, entitlements, onGoPricing, onSignOut }) {
           </div>
         </div>
 
-        {!entitlements?.has_premium ? (
-          <div className="upgrade-banner">
-            <p>
-              You are on Free. Upgrade to Premium to unlock premium-only actions and faster workflows.
-            </p>
-            <button className="btn primary" onClick={onGoPricing}>
-              View Premium
-            </button>
-          </div>
-        ) : null}
+        {tab === "workspace" ? (
+          <>
+            {!hasPremium ? (
+              <div className="upgrade-banner">
+                <p>
+                  Free plan active: {remaining("starterSearches")} Starter Searches and {remaining("roleFitChecks")} Role
+                  Fit Checks remaining.
+                </p>
+                <button className="btn primary" onClick={onGoPricing}>
+                  Upgrade
+                </button>
+              </div>
+            ) : (
+              <div className="upgrade-banner premium-banner">
+                <p>Premium active: unlimited workflows and advanced outputs.</p>
+                <button className="btn soft" onClick={onOpenBillingPortal} disabled={portalLoading}>
+                  {portalLoading ? "Opening..." : "Manage billing"}
+                </button>
+              </div>
+            )}
 
-        <div className="value-card">
-          <p className="eyebrow">First value moment</p>
-          <h2>
-            Ready to run your first {targetTitle} search for {location}?
-          </h2>
-          <p className="muted">We use your onboarding inputs to prefill your first personalized result.</p>
-          <div className="row">
-            <button className="btn primary" onClick={runFirstAction}>
-              Run my first search
-            </button>
-            <button className="btn soft" onClick={runPremiumAction}>
-              Generate premium tailored output
-            </button>
-          </div>
+            <div className="action-grid">
+              <div className="value-card">
+                <p className="eyebrow">Basic feature</p>
+                <h2>Starter Search</h2>
+                <p className="muted">Generate a focused search from your onboarding profile.</p>
+                <button className="btn primary" onClick={runStarterSearch}>
+                  Run starter search
+                </button>
+              </div>
 
-          {firstActionState ? <p className="alert info">{firstActionState}</p> : null}
-          {premiumActionState ? <p className="alert success">{premiumActionState}</p> : null}
-        </div>
+              <div className="value-card">
+                <p className="eyebrow">Basic feature</p>
+                <h2>Role Fit Check</h2>
+                <p className="muted">Get a quick fit score and recommendations for one role.</p>
+                <button className="btn soft" onClick={runRoleFitCheck}>
+                  Run fit check
+                </button>
+              </div>
+
+              <div className="value-card">
+                <p className="eyebrow">Premium workflow</p>
+                <h2>Tailored Output Draft</h2>
+                <p className="muted">Create a deeper, premium-only tailored output for your target role.</p>
+                <button className="btn soft" onClick={runPremiumAction}>
+                  Generate premium draft
+                </button>
+              </div>
+            </div>
+
+            {upgradeState ? (
+              <div className="alert info row spread">
+                <span>{upgradeState}</span>
+                <button className="btn primary" onClick={onGoPricing}>
+                  Upgrade now
+                </button>
+              </div>
+            ) : null}
+
+            {actionState ? <p className="alert info">{actionState}</p> : null}
+            {premiumActionState ? <p className="alert success">{premiumActionState}</p> : null}
+          </>
+        ) : (
+          <div className="settings-stack">
+            <div className="value-card">
+              <p className="eyebrow">Subscription</p>
+              <h2>{hasPremium ? "Premium" : "Free"}</h2>
+              <p className="muted">
+                {hasPremium
+                  ? "You can update payment method, invoices, and cancel from billing portal."
+                  : "You are on Free. Upgrade when you need more usage or premium workflows."}
+              </p>
+              <div className="row">
+                {hasPremium ? (
+                  <button className="btn primary" onClick={onOpenBillingPortal} disabled={portalLoading}>
+                    {portalLoading ? "Opening portal..." : "Manage subscription"}
+                  </button>
+                ) : (
+                  <button className="btn primary" onClick={onGoPricing}>
+                    Upgrade to Premium
+                  </button>
+                )}
+              </div>
+              {portalError ? <p className="alert error">{portalError}</p> : null}
+            </div>
+
+            <div className="value-card">
+              <p className="eyebrow">Usage</p>
+              <h2>Free limits</h2>
+              <p className="muted">Starter Searches: {hasPremium ? "Unlimited" : `${remaining("starterSearches")} left`}</p>
+              <p className="muted">Role Fit Checks: {hasPremium ? "Unlimited" : `${remaining("roleFitChecks")} left`}</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -769,6 +943,8 @@ function App() {
 
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState("");
 
   const onboardingComplete = Boolean(profile?.onboarding_completed_at);
 
@@ -833,6 +1009,26 @@ function App() {
     await supabase.auth.signOut();
     navigate(ROUTES.landing);
   }, [navigate]);
+
+  const openBillingPortal = useCallback(async () => {
+    if (!user) {
+      navigate(ROUTES.auth);
+      return;
+    }
+
+    setPortalLoading(true);
+    setPortalError("");
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.functions.invoke("create-portal-session");
+      if (error) throw error;
+      if (!data?.url) throw new Error("Billing portal URL was not returned.");
+      window.location.assign(data.url);
+    } catch (err) {
+      setPortalError(err?.message || "Unable to open billing portal right now.");
+      setPortalLoading(false);
+    }
+  }, [user, navigate]);
 
   const sharedError = profileError || entitlementsError;
 
@@ -925,6 +1121,9 @@ function App() {
           entitlements={entitlements}
           onGoPricing={() => navigate(ROUTES.pricing)}
           onSignOut={handleSignOut}
+          onOpenBillingPortal={openBillingPortal}
+          portalLoading={portalLoading}
+          portalError={portalError}
         />
       ) : null}
     </>
@@ -936,27 +1135,31 @@ function GlobalStyles() {
     <style>{`
       :root {
         color-scheme: light;
-        --bg: #f4f6fb;
+        --bg: #f3f6ff;
         --panel: #ffffff;
-        --panel-strong: #eef2ff;
-        --text: #141a2a;
-        --muted: #59617a;
-        --line: #d8deea;
-        --brand: #2358db;
-        --brand-dark: #1a44ac;
-        --success: #1f8a46;
+        --panel-strong: #eef3ff;
+        --text: #101626;
+        --muted: #4f5c79;
+        --line: #d7dff0;
+        --brand: #0b66ff;
+        --brand-dark: #0b4ed1;
+        --teal: #0ea5a4;
+        --success: #177d4a;
         --danger: #b42332;
       }
 
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
-        background: radial-gradient(circle at 10% 10%, #edf3ff 0%, var(--bg) 50%, #eef2f8 100%);
+        font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 4% 5%, #e7f6ff 0%, rgba(231, 246, 255, 0) 28%),
+          radial-gradient(circle at 92% 4%, #e6edff 0%, rgba(230, 237, 255, 0) 24%),
+          linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
         color: var(--text);
       }
 
-      h1, h2, p { margin: 0; }
+      h1, h2, h3, p { margin: 0; }
       ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); }
       li { margin-bottom: 8px; }
 
@@ -993,6 +1196,23 @@ function GlobalStyles() {
 
       .hero-card { max-width: 760px; }
       .hero-copy { margin-top: 12px; color: var(--muted); max-width: 55ch; }
+      .hero-shell { display: grid; gap: 18px; }
+      .hero-content { display: grid; gap: 10px; }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .value-chip {
+        background: linear-gradient(180deg, #f8fbff, #f4f8ff);
+        border: 1px solid #d4def5;
+        border-radius: 12px;
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+      }
+      .value-chip h3 { font-size: 16px; }
+      .value-chip p { color: var(--muted); font-size: 13px; line-height: 1.35; }
 
       .auth-panel,
       .onboarding-panel { max-width: 520px; }
@@ -1065,6 +1285,23 @@ function GlobalStyles() {
         background: white;
         color: var(--text);
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+
+      .tab-mini {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .tab-mini.active {
+        border-color: #bbceff;
+        color: #0f3ea4;
+        background: #eef3ff;
       }
 
       .btn {
@@ -1179,6 +1416,10 @@ function GlobalStyles() {
         justify-content: space-between;
         flex-wrap: wrap;
       }
+      .premium-banner {
+        border-color: #9ad7d7;
+        background: #ecfbfb;
+      }
 
       .value-card {
         margin-top: 18px;
@@ -1188,6 +1429,18 @@ function GlobalStyles() {
         padding: 18px;
         display: grid;
         gap: 10px;
+      }
+      .action-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 10px;
+      }
+      .action-grid .value-card { margin-top: 0; }
+      .settings-stack {
+        margin-top: 14px;
+        display: grid;
+        gap: 12px;
       }
 
       .spinner {
@@ -1219,6 +1472,8 @@ function GlobalStyles() {
 
       @media (max-width: 800px) {
         .price-grid { grid-template-columns: 1fr; }
+        .hero-grid { grid-template-columns: 1fr; }
+        .action-grid { grid-template-columns: 1fr; }
         .oauth-row { grid-template-columns: 1fr; }
         .hero-card, .panel { padding: 20px; }
       }
