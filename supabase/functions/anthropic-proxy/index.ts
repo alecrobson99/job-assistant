@@ -65,22 +65,33 @@ serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    });
 
-    const {
-      data: { user },
-      error: userErr,
-    } = await adminClient.auth.getUser(accessToken);
-    if (userErr || !user) {
-      return jsonResponse({ error: userErr?.message || "Unauthorized" }, 401);
+    // Prefer validation through the caller context, then fall back to admin.
+    const [{ data: userData, error: userErr }, { data: adminData, error: adminErr }] =
+      await Promise.all([
+        userClient.auth.getUser(),
+        adminClient.auth.getUser(accessToken),
+      ]);
+
+    const user = userData.user ?? adminData.user ?? null;
+    if (!user) {
+      return jsonResponse(
+        {
+          error:
+            userErr?.message ||
+            adminErr?.message ||
+            "Unauthorized",
+        },
+        401,
+      );
     }
 
     if (!user.email_confirmed_at) {
       return jsonResponse({ error: "Email verification required" }, 403);
     }
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    });
 
     const { data: subscription, error: subErr } = await adminClient
       .from("billing_subscriptions")
