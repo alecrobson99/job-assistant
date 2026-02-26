@@ -1167,6 +1167,83 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
   );
 }
 
+function TitleAutocomplete({ value, onChange, placeholder = "Search job title", compact = false }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const input = value || "";
+  const q = input.trim().toLowerCase();
+
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const matches = useMemo(() => {
+    const options = Array.from(new Set([...OCCUPATION_OPTIONS, ...TITLE_OPTIONS]));
+    if (!q) return options.slice(0, 10);
+    return options.filter((x) => x.toLowerCase().includes(q)).slice(0, 12);
+  }, [q]);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
+      <AppInput
+        value={input}
+        onChange={(v) => { onChange(v); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          if (input.trim()) onChange(input.trim());
+          setTimeout(() => setOpen(false), 80);
+        }}
+        placeholder={placeholder}
+        style={compact ? { height: 40, padding: "9px 12px" } : undefined}
+      />
+      {open && (
+        <div style={{
+          position: "absolute",
+          top: compact ? 42 : 46,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          background: "#fff",
+          border: `1px solid ${T.border}`,
+          borderRadius: 10,
+          boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
+          maxHeight: 220,
+          overflowY: "auto",
+        }}>
+          {matches.length === 0 ? (
+            <div style={{ padding: "10px 12px", fontSize: 12, color: T.textMute }}>
+              No matches. Press Enter to keep custom title.
+            </div>
+          ) : matches.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(m); setOpen(false); }}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                background: m === value ? T.primaryLight : "#fff",
+                color: T.text,
+                padding: "10px 12px",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OnboardingFlow({ profile, onSave, onSkip }) {
   const [step, setStep] = useState(0);
   const [location, setLocation] = useState(profile.location || "");
@@ -1371,12 +1448,6 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
     }
   }
   function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocError("");}
-  const titleOptions = TITLE_OPTIONS.includes(profile.targetTitle)
-    ? TITLE_OPTIONS
-    : profile.targetTitle
-      ? [profile.targetTitle, ...TITLE_OPTIONS]
-      : TITLE_OPTIONS;
-
   const renderField=(lbl,k,ph,type="text")=>(
     <div style={{marginBottom:14}}>
       <FL>{lbl}</FL>
@@ -1415,16 +1486,33 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
             <SH icon="🎯" title="Job Preferences"/>
             <div style={{marginBottom:14}}>
               <FL>Target Job Title</FL>
-              <Sel
+              <TitleAutocomplete
                 value={profile.targetTitle || ""}
                 onChange={(v)=>up("targetTitle",v)}
+                placeholder="Search or type any title"
+              />
+            </div>
+            <div style={{marginBottom:14}}>
+              <FL>Preferred Location(s)</FL>
+              <LocationAutocomplete
+                value={profile.targetLocation || ""}
+                onChange={(v)=>up("targetLocation",v)}
+                placeholder="Search city, state, country"
+              />
+            </div>
+            <div style={{marginBottom:14}}>
+              <FL>Work Mode</FL>
+              <Sel
+                value={profile.workMode || "all"}
+                onChange={(v)=>up("workMode",v)}
                 options={[
-                  { value: "", label: "Select target title" },
-                  ...titleOptions.map((opt)=>({ value: opt, label: opt })),
+                  { value: "all", label: "Any" },
+                  { value: "remote", label: "Remote" },
+                  { value: "hybrid", label: "Hybrid" },
+                  { value: "on-site", label: "On-site" },
                 ]}
               />
             </div>
-            {renderField("Preferred Location(s)","targetLocation","Remote, NYC, London")}
             {renderField("Seniority Level","seniority","Senior, Mid-level, Entry")}
             {renderField("Industries","industry","SaaS, Fintech, Healthcare")}
             <div style={{marginBottom:14}}><FL>Keywords to Highlight</FL>
@@ -1538,7 +1626,7 @@ function SuggestedView(){
 function SearchView({jobs,setJobs,profile}){
   const [query,setQuery]=useState("");
   const [searchLocation,setSearchLocation]=useState(profile?.targetLocation || profile?.location || "");
-  const [remoteOnly,setRemoteOnly]=useState(false);
+  const [workMode,setWorkMode]=useState(profile?.workMode || "all");
   const [datePosted,setDatePosted]=useState("all");
   const [results,setResults]=useState([]);
   const [selectedJobIdx,setSelectedJobIdx]=useState(0);
@@ -1578,7 +1666,7 @@ function SearchView({jobs,setJobs,profile}){
     const parts = [baseQuery];
     const locationValue = searchLocation?.trim() || profile?.targetLocation?.trim() || profile?.location?.trim() || "";
     if (locationValue) parts.push(locationValue);
-    if (remoteOnly) parts.push("remote");
+    if (workMode !== "all") parts.push(workMode);
     if (datePosted !== "all") parts.push(`posted ${datePosted}`);
     if (profileSeniority) parts.push(profileSeniority);
     if (profileIndustry) parts.push(profileIndustry);
@@ -1626,7 +1714,7 @@ function SearchView({jobs,setJobs,profile}){
       <PH title="Job Search" subtitle="LinkedIn-style search flow: search, filter, pick a role, then save."/>
       <div style={{padding:"16px 24px 24px",maxWidth:1240,margin:"0 auto"}}>
         <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr auto",gap:10,marginBottom:10}}>
-          <AppInput value={query} onChange={setQuery} placeholder='e.g. customer success, account manager, frontend engineer'
+          <TitleAutocomplete value={query} onChange={setQuery} placeholder='e.g. customer success, account manager, frontend engineer' compact
             onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
           <LocationAutocomplete value={searchLocation} onChange={setSearchLocation} placeholder="Location" compact />
           <Btn onClick={search} disabled={loading} style={{height:40,padding:"0 20px"}}>
@@ -1635,12 +1723,12 @@ function SearchView({jobs,setJobs,profile}){
         </div>
 
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
-          <button onClick={()=>setRemoteOnly(v=>!v)} style={{
-            border:`1px solid ${remoteOnly ? "#0F766E" : T.border}`,
-            background:remoteOnly ? "#0F766E" : "#fff",
-            color:remoteOnly ? "#fff" : T.text,
-            borderRadius:999,padding:"7px 14px",fontSize:13,fontWeight:700,cursor:"pointer"
-          }}>Remote {remoteOnly ? "✓" : ""}</button>
+          <Sel value={workMode} onChange={setWorkMode} options={[
+            { value: "all", label: "Work mode: Any" },
+            { value: "remote", label: "Remote" },
+            { value: "hybrid", label: "Hybrid" },
+            { value: "on-site", label: "On-site" },
+          ]} style={{width:180,padding:"8px 12px",fontSize:13}} />
           <Sel value={datePosted} onChange={setDatePosted} options={[
             { value: "all", label: "Date posted: Any time" },
             { value: "past 24 hours", label: "Past 24 hours" },
@@ -1747,6 +1835,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
   const [newJobCompany,setNewJobCompany]=useState("");
   const [newJobLocation,setNewJobLocation]=useState("");
   const [newJobDescription,setNewJobDescription]=useState("");
+  const [selectedTrackerId,setSelectedTrackerId]=useState("");
   const premiumActive = isPremiumSubscription(subscription);
 
   async function updateStatus(id,status){
@@ -1918,6 +2007,17 @@ function TrackerView({jobs,setJobs,docs,subscription}){
   const resumes = docs.filter((d) => d.type === "resume");
   const covers = docs.filter((d) => d.type === "cover_letter");
   const selectedTailorJob = jobs.find((j) => j.id === tailorModalJobId) || null;
+  const selectedTrackerJob = filtered.find((j) => j.id === selectedTrackerId) || filtered[0] || null;
+
+  useEffect(() => {
+    if (!filtered.length) {
+      setSelectedTrackerId("");
+      return;
+    }
+    if (!selectedTrackerId || !filtered.some((j) => j.id === selectedTrackerId)) {
+      setSelectedTrackerId(filtered[0].id);
+    }
+  }, [filtered, selectedTrackerId]);
 
   function openTailorModal(job) {
     setTailorModalJobId(job.id);
@@ -2047,112 +2147,123 @@ function TrackerView({jobs,setJobs,docs,subscription}){
           <div style={{textAlign:"center",padding:"60px 0",color:T.textMute}}>
             <div style={{fontSize:36,marginBottom:10}}>📭</div>
             <div style={{fontSize:14,color:T.textSub,fontWeight:600,marginBottom:4}}>No applications here</div>
-            <div style={{fontSize:13}}>Save jobs from Job Search or Suggested Roles to start tracking.</div>
+            <div style={{fontSize:13}}>Save jobs from Job Search to start tracking.</div>
           </div>
         )}
-        {filtered.length>0&&(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
-            {filtered.map((job)=>{
-              const m=STATUS_META[job.status]||STATUS_META.saved;
-              return(
-                <Card key={job.id}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:16,fontWeight:750,color:T.text}}>{job.title||"—"}</div>
-                      <div style={{fontSize:13,color:T.primary,fontWeight:600,marginTop:2}}>{job.company||"—"}</div>
-                      <div style={{fontSize:12,color:T.textMute,marginTop:2}}>{job.location||"—"} · {formatDate(job.savedAt || job.created_at)}</div>
-                    </div>
-                    <Sel value={job.status} onChange={v=>updateStatus(job.id,v)}
-                      options={STATUS_OPTIONS.map(s=>({value:s,label:STATUS_META[s].label}))}
-                      style={{padding:"4px 8px",fontSize:12,color:m.color,background:m.bg,border:`1px solid ${m.border}`,borderRadius:20,minWidth:120}}/>
-                  </div>
+        {filtered.length>0&& selectedTrackerJob &&(
+          <div style={{display:"grid",gridTemplateColumns:"1.05fr 1fr",gap:12,minHeight:540}}>
+            <Card style={{padding:0,overflow:"hidden"}}>
+              <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:"0.06em",textTransform:"uppercase"}}>
+                Jobs Inbox ({filtered.length})
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 1.3fr 1fr 1fr",padding:"8px 12px",fontSize:11,fontWeight:700,color:T.textMute,borderBottom:`1px solid ${T.border}`,background:T.bg}}>
+                <div>Role</div><div>Company</div><div>Location</div><div>Status</div><div>Saved</div>
+              </div>
+              <div style={{maxHeight:560,overflowY:"auto"}}>
+                {filtered.map((job)=>{
+                  const m=STATUS_META[job.status]||STATUS_META.saved;
+                  const active = job.id === selectedTrackerJob.id;
+                  return (
+                    <button key={job.id} onClick={()=>setSelectedTrackerId(job.id)} style={{
+                      display:"grid",gridTemplateColumns:"2fr 1.2fr 1.3fr 1fr 1fr",width:"100%",
+                      border:"none",borderBottom:`1px solid ${T.border}`,padding:"10px 12px",textAlign:"left",
+                      background:active?T.primaryLight:"#fff",cursor:"pointer",alignItems:"center"
+                    }}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.title||"—"}</div>
+                      <div style={{fontSize:12,color:T.primary,fontWeight:650,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.company||"—"}</div>
+                      <div style={{fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.location||"—"}</div>
+                      <div><span style={{fontSize:11,color:m.color,background:m.bg,border:`1px solid ${m.border}`,borderRadius:999,padding:"3px 8px",fontWeight:700}}>{STATUS_META[job.status]?.label||job.status}</span></div>
+                      <div style={{fontSize:12,color:T.textMute}}>{formatDate(job.savedAt || job.created_at)}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
 
-                  <div style={{marginBottom:8}}>
-                    <FL>Notes</FL>
-                    <TA value={job.notes || ""} onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,notes:v}:j))} rows={2}/>
-                    <div style={{marginTop:6}}>
-                      <Btn small variant="ghost" onClick={()=>saveNotes(job.id, jobs.find(j=>j.id===job.id)?.notes || "")}>Save Notes</Btn>
+            <Card>
+              {(() => {
+                const job = selectedTrackerJob;
+                return (
+                  <>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
+                      <div>
+                        <div style={{fontSize:17,fontWeight:800,color:T.text}}>{job.title||"—"}</div>
+                        <div style={{fontSize:13,color:T.primary,fontWeight:650,marginTop:2}}>{job.company||"—"}</div>
+                        <div style={{fontSize:12,color:T.textMute,marginTop:2}}>{job.location||"—"}</div>
+                      </div>
+                      <Sel value={job.status} onChange={v=>updateStatus(job.id,v)}
+                        options={STATUS_OPTIONS.map(s=>({value:s,label:STATUS_META[s].label}))}
+                        style={{padding:"4px 8px",fontSize:12,borderRadius:20,minWidth:130}}/>
                     </div>
-                  </div>
 
-                  <div style={{marginBottom:8}}>
-                    <FL>Job Description</FL>
-                    <TA
-                      value={job.description || ""}
-                      onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,description:v}:j))}
-                      rows={3}
-                      placeholder="Paste job description here if auto-scrape misses it..."
-                    />
-                    <div style={{marginTop:6}}>
-                      <Btn small variant="ghost" onClick={()=>saveDescription(job.id, jobs.find(j=>j.id===job.id)?.description || "")}>
-                        Save Description
-                      </Btn>
+                    <div style={{marginBottom:8}}>
+                      <FL>Notes</FL>
+                      <TA value={job.notes || ""} onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,notes:v}:j))} rows={2}/>
+                      <div style={{marginTop:6}}>
+                        <Btn small variant="ghost" onClick={()=>saveNotes(job.id, jobs.find(j=>j.id===job.id)?.notes || "")}>Save Notes</Btn>
+                      </div>
                     </div>
-                  </div>
 
-                  <div style={{marginBottom:10}}>
-                    <FL>Tailored Resume Summary</FL>
-                    <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
-                      {job.tailoredResume||<em>Not tailored yet.</em>}
+                    <div style={{marginBottom:8}}>
+                      <FL>Job Description</FL>
+                      <TA
+                        value={job.description || ""}
+                        onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,description:v}:j))}
+                        rows={4}
+                        placeholder="Paste job description here if auto-scrape misses it..."
+                      />
+                      <div style={{marginTop:6}}>
+                        <Btn small variant="ghost" onClick={()=>saveDescription(job.id, jobs.find(j=>j.id===job.id)?.description || "")}>
+                          Save Description
+                        </Btn>
+                      </div>
                     </div>
-                  </div>
 
-                  {job.tailoredCover ? (
                     <div style={{marginBottom:10}}>
-                      <FL>Tailored Cover Letter</FL>
-                      <div style={{fontSize:12,color:T.textSub,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
-                        {job.tailoredCover}
+                      <FL>Tailored Resume Summary</FL>
+                      <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+                        {job.tailoredResume||<em>Not tailored yet.</em>}
                       </div>
                     </div>
-                  ) : null}
 
-                  {(job.tailoredResume || job.tailoredCover) ? (
-                    <div style={{marginBottom:10,display:"grid",gap:8}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:11,color:T.textMute,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase"}}>Export format</span>
-                        <Sel
-                          value={downloadFormatByJob[job.id] || "txt"}
-                          onChange={(v)=>setDownloadFormat(job.id, v)}
-                          options={[
-                            { value: "txt", label: ".txt" },
-                            { value: "docx", label: ".docx" },
-                            { value: "pdf", label: ".pdf" },
-                          ]}
-                          style={{width:120,padding:"5px 8px",fontSize:12}}
-                        />
+                    {(job.tailoredResume || job.tailoredCover) ? (
+                      <div style={{marginBottom:10,display:"grid",gap:8}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:11,color:T.textMute,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase"}}>Export format</span>
+                          <Sel
+                            value={downloadFormatByJob[job.id] || "txt"}
+                            onChange={(v)=>setDownloadFormat(job.id, v)}
+                            options={[
+                              { value: "txt", label: ".txt" },
+                              { value: "docx", label: ".docx" },
+                              { value: "pdf", label: ".pdf" },
+                            ]}
+                            style={{width:120,padding:"5px 8px",fontSize:12}}
+                          />
+                        </div>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <Btn small variant="ghost" disabled={!job.tailoredResume} onClick={()=>downloadArtifact(job, "resume")}>
+                            Download Resume
+                          </Btn>
+                          <Btn small variant="ghost" disabled={!job.tailoredCover} onClick={()=>downloadArtifact(job, "cover")}>
+                            Download Cover
+                          </Btn>
+                        </div>
                       </div>
-                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                        <Btn
-                          small
-                          variant="ghost"
-                          disabled={!job.tailoredResume}
-                          onClick={()=>downloadArtifact(job, "resume")}
-                        >
-                          Download Resume
-                        </Btn>
-                        <Btn
-                          small
-                          variant="ghost"
-                          disabled={!job.tailoredCover}
-                          onClick={()=>downloadArtifact(job, "cover")}
-                        >
-                          Download Cover
-                        </Btn>
-                      </div>
+                    ) : null}
+
+                    {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
+
+                    <div style={{display:"flex",gap:8}}>
+                      <Btn onClick={()=>openTailorModal(job)} disabled={!premiumActive && quota.remaining <= 0} variant="secondary" small>
+                        Tailor Application
+                      </Btn>
+                      <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
                     </div>
-                  ) : null}
-
-                  {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
-
-                  <div style={{display:"flex",gap:8}}>
-                    <Btn onClick={()=>openTailorModal(job)} disabled={!premiumActive && quota.remaining <= 0} variant="secondary" small>
-                      Tailor Application
-                    </Btn>
-                    <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
-                  </div>
-                </Card>
-              );
-            })}
+                  </>
+                );
+              })()}
+            </Card>
           </div>
         )}
       </div>
@@ -2231,7 +2342,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
               </div>
               <div>
                 <FL>Location (optional)</FL>
-                <AppInput value={newJobLocation} onChange={(v)=>setNewJobLocation(v)} placeholder="e.g. Toronto, ON or Remote" />
+                <LocationAutocomplete value={newJobLocation} onChange={(v)=>setNewJobLocation(v)} placeholder="Search city, state, country" />
               </div>
               <div>
                 <FL>Job Description (optional but needed for tailoring)</FL>
@@ -2257,6 +2368,43 @@ function TrackerView({jobs,setJobs,docs,subscription}){
   );
 }
 
+function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, billingError, userName }) {
+  const premiumActive = isPremiumSubscription(subscription);
+  return (
+    <div style={{flex:1,overflow:"auto",background:T.bg}}>
+      <PH title="Settings & Billing" subtitle="Manage account and subscription in one place."/>
+      <div style={{padding:"16px 32px 30px",maxWidth:980,margin:"0 auto",display:"grid",gap:12}}>
+        <Card>
+          <SH icon="👤" title="Account"/>
+          <div style={{fontSize:13,color:T.textSub}}>Signed in as <strong style={{color:T.text}}>{userName}</strong></div>
+        </Card>
+        <Card>
+          <SH icon="💳" title="Subscription"/>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <span style={{fontSize:12,fontWeight:800,color:T.textSub,letterSpacing:"0.05em",textTransform:"uppercase"}}>Current Plan</span>
+            <span style={{
+              fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:999,
+              background:premiumActive ? T.greenBg : T.primaryLight,
+              border:`1px solid ${premiumActive ? T.greenBorder : T.primaryMid}`,
+              color:premiumActive ? T.green : T.primary
+            }}>
+              {premiumActive ? "Premium" : "Free"}
+            </span>
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {premiumActive ? (
+              <Btn onClick={onManageBilling} disabled={billingBusy}>{billingBusy ? "Working..." : "Manage billing"}</Btn>
+            ) : (
+              <Btn onClick={onUpgrade} disabled={billingBusy}>{billingBusy ? "Working..." : "Upgrade to Premium"}</Btn>
+            )}
+          </div>
+          {billingError ? <div style={{marginTop:8,fontSize:12,color:T.red}}>{billingError}</div> : null}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIDEBAR + APP SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2270,6 +2418,7 @@ function AppShell({
     {id:"suggested", icon:"🧭", label:"Suggested Jobs", disabled:true},
     {id:"search",    icon:"🔍", label:"Job Search"},
     {id:"tracker",   icon:"📊", label:"Tracker"},
+    {id:"settings",  icon:"⚙️", label:"Settings"},
   ];
 
   const views={
@@ -2277,6 +2426,7 @@ function AppShell({
     suggested: <SuggestedView />,
     search:    <SearchView    jobs={jobs} setJobs={setJobs} profile={profile}/>,
     tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs} subscription={subscription}/>,
+    settings:  <SettingsView  subscription={subscription} onUpgrade={onUpgrade} onManageBilling={onManageBilling} billingBusy={billingBusy} billingError={billingError} userName={userName} />,
   };
 
   return(
