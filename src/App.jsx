@@ -1715,6 +1715,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
   const [newJobTitle,setNewJobTitle]=useState("");
   const [newJobCompany,setNewJobCompany]=useState("");
   const [newJobLocation,setNewJobLocation]=useState("");
+  const [newJobDescription,setNewJobDescription]=useState("");
   const premiumActive = isPremiumSubscription(subscription);
 
   async function updateStatus(id,status){
@@ -1741,6 +1742,20 @@ function TrackerView({jobs,setJobs,docs,subscription}){
     }catch(e){
       setJobs(prev);
       setTrackerErr(`Could not save notes: ${e.message}`);
+    }
+  }
+  async function saveDescription(id, descriptionValue){
+    setTrackerErr("");
+    const prev = jobs;
+    const u=jobs.map(j=>j.id===id?{...j,description:descriptionValue}:j);
+    setJobs(u);
+    try{
+      await store.updateJob(id,{description:descriptionValue});
+      setTrackerMsg("Description saved.");
+      setTimeout(()=>setTrackerMsg(""),1500);
+    }catch(e){
+      setJobs(prev);
+      setTrackerErr(`Could not save description: ${e.message}`);
     }
   }
   async function deleteJob(id){
@@ -1832,7 +1847,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
         title: newJobTitle.trim() || scraped?.title || inferred.title || "Untitled Role",
         company: newJobCompany.trim() || scraped?.company || inferred.company || "Unknown Company",
         location: newJobLocation.trim() || scraped?.location || "Not specified",
-        description: scraped?.description || "",
+        description: newJobDescription.trim() || scraped?.description || "",
         url: validUrl,
         status: "saved",
         notes: "",
@@ -1843,6 +1858,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
       setNewJobTitle("");
       setNewJobCompany("");
       setNewJobLocation("");
+      setNewJobDescription("");
       setTrackerMsg("Job added to tracker.");
       setTimeout(()=>setTrackerMsg(""),1500);
     } catch (e) {
@@ -1893,7 +1909,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
       return;
     }
     if (!selectedTailorJob.description?.trim()) {
-      setTrackerErr("This job has no description. Add one from Job Search before tailoring.");
+      setTrackerErr("This job has no description. Add/paste a description in the card first, then tailor.");
       return;
     }
     if (!premiumActive && quota.remaining <= 0) {
@@ -2025,6 +2041,21 @@ function TrackerView({jobs,setJobs,docs,subscription}){
                     <TA value={job.notes || ""} onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,notes:v}:j))} rows={2}/>
                     <div style={{marginTop:6}}>
                       <Btn small variant="ghost" onClick={()=>saveNotes(job.id, jobs.find(j=>j.id===job.id)?.notes || "")}>Save Notes</Btn>
+                    </div>
+                  </div>
+
+                  <div style={{marginBottom:8}}>
+                    <FL>Job Description</FL>
+                    <TA
+                      value={job.description || ""}
+                      onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,description:v}:j))}
+                      rows={3}
+                      placeholder="Paste job description here if auto-scrape misses it..."
+                    />
+                    <div style={{marginTop:6}}>
+                      <Btn small variant="ghost" onClick={()=>saveDescription(job.id, jobs.find(j=>j.id===job.id)?.description || "")}>
+                        Save Description
+                      </Btn>
                     </div>
                   </div>
 
@@ -2170,6 +2201,15 @@ function TrackerView({jobs,setJobs,docs,subscription}){
               <div>
                 <FL>Location (optional)</FL>
                 <AppInput value={newJobLocation} onChange={(v)=>setNewJobLocation(v)} placeholder="e.g. Toronto, ON or Remote" />
+              </div>
+              <div>
+                <FL>Job Description (optional but needed for tailoring)</FL>
+                <TA
+                  value={newJobDescription}
+                  onChange={(v)=>setNewJobDescription(v)}
+                  rows={5}
+                  placeholder="Paste the job description here to ensure tailoring works even if URL scrape misses it."
+                />
               </div>
             </div>
 
