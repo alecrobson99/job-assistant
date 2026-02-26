@@ -1681,7 +1681,7 @@ function SearchView({jobs,setJobs,profile}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRACKER VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function TrackerView({jobs,setJobs,docs}){
+function TrackerView({jobs,setJobs,docs,subscription}){
   const [filterStatus,setFilterStatus]=useState("all");
   const [sortBy,setSortBy]=useState("date");
   const [trackerMsg,setTrackerMsg]=useState("");
@@ -1697,6 +1697,7 @@ function TrackerView({jobs,setJobs,docs}){
   const [tailorLoading,setTailorLoading]=useState(false);
   const [quota,setQuota]=useState({ weekly_limit: WEEKLY_TAILOR_LIMIT, used: 0, remaining: WEEKLY_TAILOR_LIMIT, resets_at: null });
   const [downloadFormatByJob,setDownloadFormatByJob]=useState({});
+  const premiumActive = isPremiumSubscription(subscription);
 
   async function updateStatus(id,status){
     setTrackerErr("");
@@ -1794,7 +1795,7 @@ function TrackerView({jobs,setJobs,docs}){
       setTrackerErr("This job has no description. Add one from Job Search before tailoring.");
       return;
     }
-    if (quota.remaining <= 0) {
+    if (!premiumActive && quota.remaining <= 0) {
       setTrackerErr("Weekly tailoring limit reached. Please wait for reset.");
       return;
     }
@@ -1823,8 +1824,10 @@ function TrackerView({jobs,setJobs,docs}){
       };
       const dbRow = await store.updateJob(selectedTailorJob.id, updates);
       setJobs((prev) => prev.map((j) => (j.id === selectedTailorJob.id ? { ...j, ...dbRow } : j)));
-      const refreshedQuota = await store.getTailoringQuota();
-      setQuota(refreshedQuota);
+      if (!premiumActive) {
+        const refreshedQuota = await store.getTailoringQuota();
+        setQuota(refreshedQuota);
+      }
       setTrackerMsg("Tailored application generated.");
       setTimeout(()=>setTrackerMsg(""),2000);
       setTailorModalJobId(null);
@@ -1878,8 +1881,11 @@ function TrackerView({jobs,setJobs,docs}){
 
       <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
         <div style={{fontSize:12,color:T.textSub}}>
-          Tailoring remaining this week: <strong style={{color:T.text}}>{quota.remaining ?? 0}</strong> / {quota.weekly_limit || WEEKLY_TAILOR_LIMIT}
-          {quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
+          Tailoring remaining this week: <strong style={{color:T.text}}>
+            {premiumActive ? "Unlimited" : (quota.remaining ?? 0)}
+          </strong>
+          {premiumActive ? null : <> / {quota.weekly_limit || WEEKLY_TAILOR_LIMIT}</>}
+          {!premiumActive && quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
         </div>
       </div>
 
@@ -1971,7 +1977,7 @@ function TrackerView({jobs,setJobs,docs}){
                   {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
 
                   <div style={{display:"flex",gap:8}}>
-                    <Btn onClick={()=>openTailorModal(job)} disabled={quota.remaining <= 0} variant="secondary" small>
+                    <Btn onClick={()=>openTailorModal(job)} disabled={!premiumActive && quota.remaining <= 0} variant="secondary" small>
                       Tailor Application
                     </Btn>
                     <Btn onClick={()=>deleteJob(job.id)} variant="danger" small>Delete</Btn>
@@ -1995,8 +2001,9 @@ function TrackerView({jobs,setJobs,docs}){
             </div>
 
             <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>
-              Remaining this week: <strong style={{color:T.text}}>{quota.remaining}</strong> / {quota.weekly_limit}
-              {quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
+              Remaining this week: <strong style={{color:T.text}}>{premiumActive ? "Unlimited" : quota.remaining}</strong>
+              {premiumActive ? null : <> / {quota.weekly_limit}</>}
+              {!premiumActive && quota.resets_at ? <> · Resets {new Date(quota.resets_at).toLocaleString()}</> : null}
             </div>
 
             <div style={{display:"grid",gap:10}}>
@@ -2011,7 +2018,7 @@ function TrackerView({jobs,setJobs,docs}){
 
             <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
               <Btn variant="ghost" onClick={()=>setTailorModalJobId(null)} disabled={tailorLoading}>Cancel</Btn>
-              <Btn onClick={generateTailoredApplication} disabled={tailorLoading || quota.remaining <= 0}>
+              <Btn onClick={generateTailoredApplication} disabled={tailorLoading || (!premiumActive && quota.remaining <= 0)}>
                 {tailorLoading ? <><Spinner color="#fff"/> Generating…</> : "Generate tailored application"}
               </Btn>
             </div>
@@ -2041,7 +2048,7 @@ function AppShell({
     profile:   <ProfileView   docs={docs} setDocs={setDocs} profile={profile} setProfileState={setProfileState}/>,
     suggested: <SuggestedView />,
     search:    <SearchView    jobs={jobs} setJobs={setJobs} profile={profile}/>,
-    tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs}/>,
+    tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs} subscription={subscription}/>,
   };
 
   return(

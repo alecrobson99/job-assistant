@@ -12,7 +12,12 @@ type ProxyPayload = {
   messages?: Array<{ role: string; content: unknown }>;
 };
 
-function isPaidStatus(status?: string | null) {
+function isPaidSubscription(subscription: { status?: string | null; has_premium?: boolean | null; tier?: string | null } | null) {
+  if (!subscription) return false;
+  if (subscription.has_premium === true) return true;
+  const tier = String(subscription.tier || "").toLowerCase();
+  if (tier === "premium" || tier === "pro") return true;
+  const status = String(subscription.status || "").toLowerCase();
   return status === "active" || status === "trialing";
 }
 
@@ -79,7 +84,7 @@ serve(async (req) => {
 
     const { data: subscription, error: subErr } = await adminClient
       .from("billing_subscriptions")
-      .select("status")
+      .select("status,has_premium,tier")
       .eq("user_id", user.id)
       .maybeSingle();
     if (subErr && subErr.code !== "PGRST116") {
@@ -94,7 +99,7 @@ serve(async (req) => {
     const usageType = body.usageType || "tailor";
     const shouldChargeUsage = usageType === "tailor";
 
-    if (!isPaidStatus(subscription?.status ?? "inactive") && shouldChargeUsage) {
+    if (!isPaidSubscription(subscription ?? null) && shouldChargeUsage) {
       const { error: quotaErr } = await userClient.rpc("consume_tailoring_use", {
         p_job_id: body.jobId || null,
       });
