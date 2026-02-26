@@ -1816,11 +1816,23 @@ function TrackerView({jobs,setJobs,docs,subscription}){
     setAddingJob(true);
     try {
       const inferred = inferJobFromUrl(validUrl);
+      let scraped = null;
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase.functions.invoke("scrape-job-url", {
+          body: { url: validUrl },
+        });
+        if (!error && data && !data.error) {
+          scraped = data;
+        }
+      } catch {
+        // fall back to inferred fields only
+      }
       const saved = await store.insertJob({
-        title: newJobTitle.trim() || inferred.title || "Untitled Role",
-        company: newJobCompany.trim() || inferred.company || "Unknown Company",
-        location: newJobLocation.trim() || "Not specified",
-        description: "",
+        title: newJobTitle.trim() || scraped?.title || inferred.title || "Untitled Role",
+        company: newJobCompany.trim() || scraped?.company || inferred.company || "Unknown Company",
+        location: newJobLocation.trim() || scraped?.location || "Not specified",
+        description: scraped?.description || "",
         url: validUrl,
         status: "saved",
         notes: "",
