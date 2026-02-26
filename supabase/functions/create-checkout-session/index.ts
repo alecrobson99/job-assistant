@@ -4,9 +4,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 type CheckoutPayload = {
-  plan?: "monthly" | "yearly";
   priceId?: string;
 };
+
+const PREMIUM_PRICE_ID = "price_1T4I2sBWU2sVjaR70RXgIZv1";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -19,9 +20,10 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
     const appUrl = Deno.env.get("APP_URL");
-    const defaultPriceId = Deno.env.get("STRIPE_PRICE_ID");
-    const monthlyPriceId = Deno.env.get("STRIPE_PRICE_MONTHLY");
-    const yearlyPriceId = Deno.env.get("STRIPE_PRICE_YEARLY");
+    const envPremiumPriceId =
+      Deno.env.get("STRIPE_PREMIUM_PRICE_ID") ||
+      Deno.env.get("STRIPE_PRICE_ID") ||
+      PREMIUM_PRICE_ID;
 
     const missingEnv: string[] = [];
     if (!supabaseUrl) missingEnv.push("SUPABASE_URL");
@@ -98,21 +100,26 @@ serve(async (req) => {
     }
 
     const body = (await req.json().catch(() => ({}))) as CheckoutPayload;
-    let priceId = body.priceId || defaultPriceId;
-
-    if (body.plan === "monthly") priceId = monthlyPriceId || priceId;
-    if (body.plan === "yearly") priceId = yearlyPriceId || priceId;
-
-    if (!priceId) {
-      throw new Error("Missing Stripe price id");
+    const requestedPriceId = body.priceId || envPremiumPriceId;
+    if (envPremiumPriceId !== PREMIUM_PRICE_ID) {
+      throw new Error("Server premium price configuration does not match expected premium price id");
     }
+
+    if (requestedPriceId !== PREMIUM_PRICE_ID) {
+      return new Response(JSON.stringify({ error: "Invalid price for this checkout session" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const normalizedAppUrl = appUrl.replace(/\/+$/, "");
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${appUrl}?billing=success`,
-      cancel_url: `${appUrl}?billing=cancel`,
+      line_items: [{ price: PREMIUM_PRICE_ID, quantity: 1 }],
+      success_url: `${normalizedAppUrl}/billing/return?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${normalizedAppUrl}/pricing?canceled=1`,
       allow_promotion_codes: true,
       client_reference_id: user.id,
       metadata: {
