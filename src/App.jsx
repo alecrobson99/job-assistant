@@ -20,7 +20,7 @@ const T = {
 
 const STATUS_META = {
   saved:     { color: T.primary, bg: T.primaryLight, border: T.primaryMid,    label: "Saved"     },
-  tailored:  { color: T.violet,  bg: T.violetBg,     border: T.violetBorder,  label: "Tailored Jobs" },
+  tailored:  { color: T.violet,  bg: T.violetBg,     border: T.violetBorder,  label: "Tailored" },
   applied:   { color: T.teal,    bg: T.tealBg,       border: T.tealBorder,    label: "Applied"   },
   interview: { color: T.amber,   bg: T.amberBg,      border: T.amberBorder,   label: "Interview" },
   offer:     { color: T.green,   bg: T.greenBg,      border: T.greenBorder,   label: "Offer"     },
@@ -193,6 +193,7 @@ function LandingPage({ onLogin }) {
   const [error, setError] = useState("");
   const [billingCycle, setBillingCycle] = useState("monthly");
   const [currency, setCurrency] = useState("USD");
+  const [infoMsg, setInfoMsg] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -339,7 +340,7 @@ function LandingPage({ onLogin }) {
             </div>
           </div>
 
-          <section style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
+          <section id="auth" style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
             <h2 style={{ fontSize:20, margin:"0 0 6px", color:"#0F172A" }}>
               {isLogin ? "Sign in" : "Create account"}
             </h2>
@@ -347,9 +348,16 @@ function LandingPage({ onLogin }) {
               {isLogin ? "Continue where you left off." : "Start on Free, upgrade only when needed."}
             </p>
 
+            {infoMsg && (
+              <div style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8,
+                padding:"10px 12px", marginBottom:14, fontSize:13, color:"#1D4ED8" }} role="status" aria-live="polite">
+                {infoMsg}
+              </div>
+            )}
+
             {error && (
               <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
-                padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }}>
+                padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }} role="alert" aria-live="assertive">
                 {error}
               </div>
             )}
@@ -358,28 +366,29 @@ function LandingPage({ onLogin }) {
               {!isLogin && (
                 <div style={{ marginBottom:12 }}>
                   <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
-                  <input type="text" value={name} onChange={e=>setName(e.target.value)}
+                  <input id="auth-name" type="text" value={name} onChange={e=>setName(e.target.value)}
                     placeholder="Jane Smith" required style={inputStyle}/>
                 </div>
               )}
 
               <div style={{ marginBottom:12 }}>
                 <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
-                <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                  placeholder="you@example.com" required style={inputStyle}/>
+                <input id="auth-email" type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                  placeholder="you@example.com" required style={inputStyle} aria-invalid={!!error}/>
               </div>
 
               <div style={{ marginBottom:16 }}>
                 <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
-                <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
-                  placeholder="At least 6 characters" required minLength={6} style={inputStyle}/>
+                <input id="auth-password" type="password" value={password} onChange={e=>setPassword(e.target.value)}
+                  placeholder="At least 6 characters" required minLength={6} style={inputStyle} aria-describedby="auth-password-help" aria-invalid={!!error}/>
+                <div id="auth-password-help" style={{marginTop:6,fontSize:11,color:"#64748B"}}>Use at least 6 characters.</div>
               </div>
 
               <button type="submit" disabled={loading} style={{
                 width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8,
                 padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
               }}>
-                {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
+                {loading ? "Please wait..." : (isLogin ? "Sign in" : "Create account")}
               </button>
             </form>
 
@@ -388,7 +397,7 @@ function LandingPage({ onLogin }) {
               <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
                 background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
               }}>
-                {isLogin ? "Create one" : "Sign in"}
+                {isLogin ? "Create account" : "Sign in"}
               </button>
             </div>
           </section>
@@ -428,8 +437,16 @@ function LandingPage({ onLogin }) {
                   <li>Document upload and management</li>
                   <li>{plan.name === "Free" ? "Weekly tailoring limits" : "Higher or unlimited tailoring usage"}</li>
                 </ul>
-                <button onClick={()=>setIsLogin(plan.name === "Free" ? false : true)} style={{ width:"100%", background:plan.name==="Pro"?"#2457D6":"#fff", color:plan.name==="Pro"?"#fff":"#2457D6", border:plan.name==="Pro"?"none":"1px solid #BCD0FA", borderRadius:8, padding:"9px 11px", fontWeight:700, cursor:"pointer" }}>
-                  {plan.name === "Free" ? "Start free" : "Get started"}
+                <button
+                  onClick={() => {
+                    const isFree = plan.name === "Free";
+                    setIsLogin(!isFree);
+                    setInfoMsg(isFree ? "" : "Sign in to upgrade to Premium from the dashboard Settings tab.");
+                    document.getElementById("auth")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  style={{ width:"100%", background:plan.name==="Pro"?"#2457D6":"#fff", color:plan.name==="Pro"?"#fff":"#2457D6", border:plan.name==="Pro"?"none":"1px solid #BCD0FA", borderRadius:8, padding:"9px 11px", fontWeight:700, cursor:"pointer" }}
+                >
+                  {plan.name === "Free" ? "Start free" : "Sign in to upgrade"}
                 </button>
               </div>
             ))}
@@ -1542,7 +1559,7 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
 
         <div style={{marginBottom:24}}>
           <Btn onClick={save} variant={savedMsg?"success":"primary"} disabled={savingProfile}>
-            {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save All Preferences"}
+            {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save Profile Defaults"}
           </Btn>
         </div>
 
@@ -1623,7 +1640,7 @@ function SuggestedView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // JOB SEARCH VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function SearchView({jobs,setJobs,profile}){
+function SearchView({jobs,setJobs,profile,onNavigate}){
   const [query,setQuery]=useState("");
   const [searchLocation,setSearchLocation]=useState(profile?.targetLocation || profile?.location || "");
   const [workMode,setWorkMode]=useState(profile?.workMode || "all");
@@ -1740,7 +1757,12 @@ function SearchView({jobs,setJobs,profile}){
           )}
         </div>
 
-        {error&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:12}}>{error}</div>}
+        {error&&(
+          <div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <span>{error}</span>
+            <Btn small variant="ghost" onClick={search}>Retry</Btn>
+          </div>
+        )}
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1.2fr",gap:12,minHeight:520}}>
           <Card style={{padding:0,overflow:"hidden"}}>
@@ -1750,7 +1772,13 @@ function SearchView({jobs,setJobs,profile}){
             </div>
             <div style={{maxHeight:560,overflowY:"auto"}}>
               {results.length===0 && (
-                <div style={{padding:20,fontSize:13,color:T.textSub}}>Run a search to see job matches.</div>
+                <div style={{padding:20,fontSize:13,color:T.textSub,display:"grid",gap:10}}>
+                  <span>Run a search to see job matches.</span>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <Btn small variant="secondary" onClick={search}>Search with defaults</Btn>
+                    {jobs.length > 0 ? <Btn small variant="ghost" onClick={()=>onNavigate?.("tracker")}>Go to Saved Jobs</Btn> : null}
+                  </div>
+                </div>
               )}
               {results.map((job,i)=>{
                 const active = i === selectedJobIdx;
@@ -1812,7 +1840,7 @@ function SearchView({jobs,setJobs,profile}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRACKER VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function TrackerView({jobs,setJobs,docs,subscription}){
+function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
   const [filterStatus,setFilterStatus]=useState("all");
   const [sortBy,setSortBy]=useState("date");
   const [trackerMsg,setTrackerMsg]=useState("");
@@ -2092,7 +2120,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
 
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
-      <PH title="Application Tracker" subtitle={`${jobs.length} application${jobs.length!==1?"s":""} tracked`}
+      <PH title="Saved Jobs" subtitle={`${jobs.length} job${jobs.length!==1?"s":""} tracked`}
         action={
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             <Btn onClick={()=>setShowAddJobModal(true)} variant="secondary">+ Add Job</Btn>
@@ -2134,7 +2162,7 @@ function TrackerView({jobs,setJobs,docs,subscription}){
 
       <div style={{padding:"10px 32px 0",maxWidth:1180,margin:"0 auto",width:"100%"}}>
         <div style={{fontSize:12,color:T.textSub}}>
-          Tailoring remaining this week: <strong style={{color:T.text}}>
+          Weekly Limit: <strong style={{color:T.text}}>
             {premiumActive ? "Unlimited" : (quota.remaining ?? 0)}
           </strong>
           {premiumActive ? null : <> / {quota.weekly_limit || WEEKLY_TAILOR_LIMIT}</>}
@@ -2147,7 +2175,11 @@ function TrackerView({jobs,setJobs,docs,subscription}){
           <div style={{textAlign:"center",padding:"60px 0",color:T.textMute}}>
             <div style={{fontSize:36,marginBottom:10}}>📭</div>
             <div style={{fontSize:14,color:T.textSub,fontWeight:600,marginBottom:4}}>No applications here</div>
-            <div style={{fontSize:13}}>Save jobs from Job Search to start tracking.</div>
+            <div style={{fontSize:13,marginBottom:12}}>Save jobs from Job Search to start tracking.</div>
+            <div style={{display:"flex",justifyContent:"center",gap:8,flexWrap:"wrap"}}>
+              <Btn small variant="secondary" onClick={()=>onNavigate?.("search")}>Go to Job Search</Btn>
+              <Btn small variant="ghost" onClick={()=>setShowAddJobModal(true)}>+ Add Job by URL</Btn>
+            </div>
           </div>
         )}
         {filtered.length>0&& selectedTrackerJob &&(
@@ -2424,10 +2456,16 @@ function AppShell({
   const views={
     profile:   <ProfileView   docs={docs} setDocs={setDocs} profile={profile} setProfileState={setProfileState}/>,
     suggested: <SuggestedView />,
-    search:    <SearchView    jobs={jobs} setJobs={setJobs} profile={profile}/>,
-    tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs} subscription={subscription}/>,
+    search:    <SearchView    jobs={jobs} setJobs={setJobs} profile={profile} onNavigate={setActive}/>,
+    tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs} subscription={subscription} onNavigate={setActive}/>,
     settings:  <SettingsView  subscription={subscription} onUpgrade={onUpgrade} onManageBilling={onManageBilling} billingBusy={billingBusy} billingError={billingError} userName={userName} />,
   };
+  const flow = [
+    { id: "profile", label: "Profile Defaults", done: !!((profile?.targetTitle || "").trim() && ((profile?.targetLocation || "").trim() || (profile?.location || "").trim())) },
+    { id: "search", label: "Job Search", done: jobs.length > 0 },
+    { id: "tracker", label: "Saved Jobs", done: jobs.some((j)=>j.status === "tailored" || j.tailoredResume || j.tailoredCover) },
+  ];
+  const nextStep = flow.find((s)=>!s.done);
 
   return(
     <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
@@ -2438,7 +2476,7 @@ function AppShell({
         </div>
         <nav style={{display:"flex",flexDirection:"column",gap:4,marginTop:6,flex:1}}>
           {nav.map(n=>(
-            <button key={n.id} onClick={()=>{ if(!n.disabled) setActive(n.id); }} style={{
+            <button key={n.id} onClick={()=>{ if(!n.disabled) setActive(n.id); }} title={n.disabled ? "Coming soon" : n.label} style={{
               display:"flex",alignItems:"center",gap:10,padding:"10px 11px",borderRadius:10,border:"none",
               cursor:n.disabled?"not-allowed":"pointer",width:"100%",background:active===n.id?T.primaryLight:"transparent",
               color:n.disabled?T.textMute:(active===n.id?T.primary:T.textSub),fontFamily:"inherit",fontSize:13,
@@ -2481,6 +2519,16 @@ function AppShell({
         </div>
       </aside>
       <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:`radial-gradient(circle at 0% 0%,#FFFFFF 0%,${T.bg} 55%)`}}>
+        {nextStep ? (
+          <div style={{padding:"10px 24px 0",flexShrink:0}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 10px",display:"flex",alignItems:"center",gap:8,justifyContent:"space-between"}}>
+              <div style={{fontSize:12,color:T.textSub}}>
+                Next step: <strong style={{color:T.text}}>{nextStep.label}</strong>
+              </div>
+              <Btn small onClick={()=>setActive(nextStep.id)}>Continue</Btn>
+            </div>
+          </div>
+        ) : null}
         {views[active]}
       </main>
     </div>
