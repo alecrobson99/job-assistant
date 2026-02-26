@@ -35,8 +35,9 @@ serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
+    const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
+    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const accessToken = tokenMatch?.[1]?.trim() || null;
     if (!accessToken) {
       return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
         status: 401,
@@ -50,7 +51,7 @@ serve(async (req) => {
     } = await adminClient.auth.getUser(accessToken);
 
     if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ error: userErr?.message || "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
