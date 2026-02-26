@@ -803,8 +803,24 @@ function App() {
     setCheckoutError("");
     try {
       const supabase = getSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setCheckoutError("Your session expired. Please sign in again and retry.");
+        navigate(ROUTES.auth);
+        setCheckoutLoading(false);
+        return;
+      }
+
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       const { data, error } = await supabase.functions.invoke("create-checkout-session", {
         body: { priceId: PREMIUM_PRICE_ID },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          ...(anonKey ? { apikey: anonKey } : {}),
+        },
       });
 
       if (error) throw error;
