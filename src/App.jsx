@@ -736,6 +736,234 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+function xmlEscape(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function toUint8(value) {
+  return new TextEncoder().encode(value);
+}
+
+function crc32(bytes) {
+  let crc = -1;
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc ^= bytes[i];
+    for (let j = 0; j < 8; j += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+function makeZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+
+  const now = new Date();
+  const dosTime = ((now.getHours() & 0x1f) << 11) | ((now.getMinutes() & 0x3f) << 5) | ((Math.floor(now.getSeconds() / 2)) & 0x1f);
+  const dosDate = (((now.getFullYear() - 1980) & 0x7f) << 9) | (((now.getMonth() + 1) & 0x0f) << 5) | (now.getDate() & 0x1f);
+
+  for (const entry of entries) {
+    const nameBytes = toUint8(entry.name);
+    const dataBytes = typeof entry.data === "string" ? toUint8(entry.data) : entry.data;
+    const crc = crc32(dataBytes);
+
+    const local = new Uint8Array(30 + nameBytes.length + dataBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true); // UTF-8 filenames
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, dosTime, true);
+    lv.setUint16(12, dosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, dataBytes.length, true);
+    lv.setUint32(22, dataBytes.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    local.set(dataBytes, 30 + nameBytes.length);
+    locals.push(local);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true); // UTF-8 filenames
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, dosTime, true);
+    cv.setUint16(14, dosDate, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, dataBytes.length, true);
+    cv.setUint32(24, dataBytes.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centrals.push(central);
+
+    offset += local.length;
+  }
+
+  const centralOffset = offset;
+  let centralSize = 0;
+  for (const c of centrals) centralSize += c.length;
+
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, entries.length, true);
+  ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, centralOffset, true);
+  ev.setUint16(20, 0, true);
+
+  return new Blob([...locals, ...centrals, end], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+}
+
+function createDocxBlob(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const paragraphs = lines.map((line) => {
+    const safe = xmlEscape(line);
+    return `<w:p><w:r><w:t xml:space="preserve">${safe}</w:t></w:r></w:p>`;
+  }).join("");
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`;
+
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  const coreProps = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Tailored Application</dc:title>
+  <dc:creator>Job Assistant</dc:creator>
+  <cp:lastModifiedBy>Job Assistant</cp:lastModifiedBy>
+</cp:coreProperties>`;
+
+  const appProps = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Job Assistant</Application>
+</Properties>`;
+
+  const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+  </w:style>
+</w:styles>`;
+
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
+  <w:body>
+    ${paragraphs}
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+
+  return makeZip([
+    { name: "[Content_Types].xml", data: contentTypes },
+    { name: "_rels/.rels", data: rels },
+    { name: "docProps/core.xml", data: coreProps },
+    { name: "docProps/app.xml", data: appProps },
+    { name: "word/_rels/document.xml.rels", data: docRels },
+    { name: "word/styles.xml", data: stylesXml },
+    { name: "word/document.xml", data: documentXml },
+  ]);
+}
+
+function createPdfBlob(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const wrapped = [];
+  for (const line of lines) {
+    if (!line) {
+      wrapped.push("");
+      continue;
+    }
+    const words = line.split(/\s+/);
+    let current = "";
+    for (const w of words) {
+      const next = current ? `${current} ${w}` : w;
+      if (next.length > 95) {
+        wrapped.push(current);
+        current = w;
+      } else {
+        current = next;
+      }
+    }
+    wrapped.push(current);
+  }
+
+  const maxLines = 48;
+  const pageLines = wrapped.slice(0, maxLines);
+  const escaped = pageLines.map((l) => l.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)"));
+  const streamLines = ["BT", "/F1 11 Tf", "50 760 Td", "14 TL"];
+  escaped.forEach((l, i) => {
+    if (i > 0) streamLines.push("T*");
+    streamLines.push(`(${l}) Tj`);
+  });
+  streamLines.push("ET");
+  const stream = streamLines.join("\n");
+  const streamBytes = toUint8(stream);
+
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n",
+    `4 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n${stream}\nendstream\nendobj\n`,
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+  ];
+  const headerBytes = toUint8("%PDF-1.4\n");
+  const objectBytes = objects.map((obj) => toUint8(obj));
+  const offsets = [0];
+  let cursor = headerBytes.length;
+  for (const bytes of objectBytes) {
+    offsets.push(cursor);
+    cursor += bytes.length;
+  }
+
+  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i < offsets.length; i += 1) {
+    xref += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  const xrefBytes = toUint8(xref);
+  const trailerBytes = toUint8(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${cursor}\n%%EOF`);
+
+  return new Blob([headerBytes, ...objectBytes, xrefBytes, trailerBytes], { type: "application/pdf" });
+}
+
 function buildTailoredText(job, type) {
   const heading = type === "resume" ? "Tailored Resume" : "Tailored Cover Letter";
   const bodyRaw = type === "resume" ? (job.tailoredResume || "") : (job.tailoredCover || "");
@@ -753,15 +981,10 @@ function downloadTailoredArtifact(job, type, format) {
   }
 
   if (format === "pdf") {
-    // Keep line breaks/bullets intact in exported text payload.
-    return downloadBlob(new Blob([text], { type: "application/pdf" }), `${base}.pdf`);
+    return downloadBlob(createPdfBlob(text), `${base}.pdf`);
   }
 
-  // Keep line breaks/bullets intact in exported text payload.
-  return downloadBlob(
-    new Blob([text], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
-    `${base}.docx`
-  );
+  return downloadBlob(createDocxBlob(text), `${base}.docx`);
 }
 
 // ─── Design primitives ────────────────────────────────────────────────────────
