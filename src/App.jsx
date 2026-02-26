@@ -297,54 +297,59 @@ function LandingPage({ onLogin }) {
   };
   
   return (
-    <div style={{ minHeight:"100vh", background:"#F5F7FB", padding:"20px 16px 40px" }}>
-      <main style={{ maxWidth:1120, margin:"0 auto", display:"grid", gap:18 }}>
-        <header style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
-          <div style={{ fontSize:18, fontWeight:800, color:"#0F172A" }}>Job Assistant</div>
+    <div style={{ minHeight:"100vh", background:"var(--bg)", padding:"20px 16px 44px" }}>
+      <main style={{ maxWidth:1160, margin:"0 auto", display:"grid", gap:20 }}>
+        <header style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", boxShadow:"var(--shadow-sm)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:34, height:34, borderRadius:10, background:"linear-gradient(135deg, var(--accent), #818CF8)", color:"#fff", display:"grid", placeItems:"center", fontFamily:"Sora, DM Sans, sans-serif", fontSize:16, fontWeight:700 }}>
+              A
+            </div>
+            <div style={{ fontFamily:"Sora, DM Sans, sans-serif", fontSize:20, fontWeight:700, color:"var(--text-primary)" }}>Applyify</div>
+          </div>
           <nav style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <a href="#product" style={{ textDecoration:"none", color:"#334155", fontSize:13, fontWeight:650, padding:"7px 10px", border:"1px solid #E2E8F0", borderRadius:8 }}>Product</a>
-            <a href="#pricing" style={{ textDecoration:"none", color:"#334155", fontSize:13, fontWeight:650, padding:"7px 10px", border:"1px solid #E2E8F0", borderRadius:8 }}>Pricing</a>
-            <a href="#faq" style={{ textDecoration:"none", color:"#334155", fontSize:13, fontWeight:650, padding:"7px 10px", border:"1px solid #E2E8F0", borderRadius:8 }}>FAQ</a>
-            <button onClick={()=>setIsLogin(true)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"8px 12px", fontWeight:700, cursor:"pointer", fontSize:13 }}>Sign in</button>
+            <a href="#product" style={{ textDecoration:"none", color:"var(--text-secondary)", fontSize:13, fontWeight:650, padding:"7px 11px", border:"1px solid var(--border)", borderRadius:9 }}>Product</a>
+            <a href="#pricing" style={{ textDecoration:"none", color:"var(--text-secondary)", fontSize:13, fontWeight:650, padding:"7px 11px", border:"1px solid var(--border)", borderRadius:9 }}>Pricing</a>
+            <a href="#faq" style={{ textDecoration:"none", color:"var(--text-secondary)", fontSize:13, fontWeight:650, padding:"7px 11px", border:"1px solid var(--border)", borderRadius:9 }}>FAQ</a>
+            <button onClick={()=>setIsLogin(true)} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:9, padding:"8px 13px", fontWeight:700, cursor:"pointer", fontSize:13 }}>Sign in</button>
           </nav>
         </header>
 
-        <section id="product" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))", gap:18 }}>
-          <div style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:28 }}>
-            <div style={{ fontSize:12, fontWeight:800, color:"#5C6B8A", marginBottom:10, letterSpacing:"0.04em" }}>JOB SEARCH CRM + TAILORING</div>
-            <h1 style={{ fontSize:38, lineHeight:1.12, margin:"0 0 10px", color:"#0F172A", letterSpacing:"-0.03em" }}>
+        <section id="product" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(360px,1fr))", gap:18 }}>
+          <div style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:28, boxShadow:"var(--shadow-sm)" }}>
+            <div style={{ fontSize:12, fontWeight:800, color:"var(--text-secondary)", marginBottom:10, letterSpacing:"0.06em" }}>JOB SEARCH CRM + TAILORING</div>
+            <h1 style={{ fontFamily:"Sora, DM Sans, sans-serif", fontSize:52, lineHeight:1.04, margin:"0 0 12px", color:"var(--text-primary)", letterSpacing:"-0.05em" }}>
               Find, track, and tailor applications in one workspace.
             </h1>
-            <p style={{ fontSize:15, lineHeight:1.6, color:"#475569", margin:"0 0 16px", maxWidth:700 }}>
-              Replace scattered notes and repetitive edits with a single pipeline: search jobs, track application status, and generate tailored resume/cover content from your own documents.
+            <p style={{ fontSize:15, lineHeight:1.65, color:"var(--text-secondary)", margin:"0 0 16px", maxWidth:700 }}>
+              Replace scattered notes and repetitive edits with one pipeline: search jobs, track status, and generate tailored resume and cover content from your own documents.
             </p>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:10, marginBottom:18 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:10, marginBottom:18 }}>
               {[
                 "Unified application tracker",
                 "Tailored content generation",
                 "Document management",
                 "Built-in weekly usage controls",
               ].map((item) => (
-                <div key={item} style={{ border:"1px solid #E2E8F0", borderRadius:10, padding:"10px 12px", background:"#F8FAFF", fontSize:13, color:"#334155", fontWeight:600 }}>
+                <div key={item} style={{ border:"1px solid var(--border)", borderRadius:10, padding:"10px 12px", background:"var(--bg)", fontSize:13, color:"var(--text-secondary)", fontWeight:600 }}>
                   {item}
                 </div>
               ))}
             </div>
             <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-              <button onClick={()=>setIsLogin(false)} style={{ background:"#2457D6", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
+              <button onClick={()=>setIsLogin(false)} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:10, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
                 Create free account
               </button>
-              <a href="#pricing" style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid #D0D7E2", borderRadius:8, color:"#334155", textDecoration:"none", fontWeight:700 }}>
+              <a href="#pricing" style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid var(--border)", borderRadius:10, color:"var(--text-secondary)", textDecoration:"none", fontWeight:700 }}>
                 See pricing
               </a>
             </div>
           </div>
 
-          <section id="auth" style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
-            <h2 style={{ fontSize:20, margin:"0 0 6px", color:"#0F172A" }}>
+          <section id="auth" style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
+            <h2 style={{ fontSize:34, margin:"0 0 6px", color:"var(--text-primary)", letterSpacing:"-0.03em", fontFamily:"Sora, DM Sans, sans-serif" }}>
               {isLogin ? "Sign in" : "Create account"}
             </h2>
-            <p style={{ fontSize:13, color:"#64748B", margin:"0 0 16px" }}>
+            <p style={{ fontSize:13, color:"var(--text-secondary)", margin:"0 0 16px" }}>
               {isLogin ? "Continue where you left off." : "Start on Free, upgrade only when needed."}
             </p>
 
@@ -365,37 +370,37 @@ function LandingPage({ onLogin }) {
             <form onSubmit={handleSubmit}>
               {!isLogin && (
                 <div style={{ marginBottom:12 }}>
-                  <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Full Name</label>
+                  <label style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--text-secondary)", marginBottom:6 }}>Full Name</label>
                   <input id="auth-name" type="text" value={name} onChange={e=>setName(e.target.value)}
                     placeholder="Jane Smith" required style={inputStyle}/>
                 </div>
               )}
 
               <div style={{ marginBottom:12 }}>
-                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Email</label>
+                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--text-secondary)", marginBottom:6 }}>Email</label>
                 <input id="auth-email" type="email" value={email} onChange={e=>setEmail(e.target.value)}
                   placeholder="you@example.com" required style={inputStyle} aria-invalid={!!error}/>
               </div>
 
               <div style={{ marginBottom:16 }}>
-                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#475569", marginBottom:6 }}>Password</label>
+                <label style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--text-secondary)", marginBottom:6 }}>Password</label>
                 <input id="auth-password" type="password" value={password} onChange={e=>setPassword(e.target.value)}
                   placeholder="At least 6 characters" required minLength={6} style={inputStyle} aria-describedby="auth-password-help" aria-invalid={!!error}/>
-                <div id="auth-password-help" style={{marginTop:6,fontSize:11,color:"#64748B"}}>Use at least 6 characters.</div>
+                <div id="auth-password-help" style={{marginTop:6,fontSize:11,color:"var(--text-secondary)"}}>Use at least 6 characters.</div>
               </div>
 
               <button type="submit" disabled={loading} style={{
-                width:"100%", background:loading?"#94A3B8":"#2457D6", color:"#fff", border:"none", borderRadius:8,
+                width:"100%", background:loading?"#94A3B8":"var(--accent)", color:"#fff", border:"none", borderRadius:10,
                 padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
               }}>
-                {loading ? "Please wait..." : (isLogin ? "Sign in" : "Create account")}
+                {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
               </button>
             </form>
 
-            <div style={{ marginTop:12, fontSize:12, color:"#64748B" }}>
+            <div style={{ marginTop:12, fontSize:12, color:"var(--text-secondary)" }}>
               {isLogin ? "No account yet? " : "Already have an account? "}
               <button onClick={()=>{setIsLogin(!isLogin);setError("");}} style={{
-                background:"none", border:"none", color:"#2457D6", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
+                background:"none", border:"none", color:"var(--accent)", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", padding:0
               }}>
                 {isLogin ? "Create account" : "Sign in"}
               </button>
@@ -403,7 +408,7 @@ function LandingPage({ onLogin }) {
           </section>
         </section>
 
-        <section id="pricing" style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
+        <section id="pricing" style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:14, flexWrap:"wrap", marginBottom:14 }}>
             <div>
               <h2 style={{ fontSize:30, margin:"0 0 6px", color:"#0F172A", letterSpacing:"-0.02em" }}>Simple pricing that scales with your search</h2>
@@ -444,7 +449,7 @@ function LandingPage({ onLogin }) {
                     setInfoMsg(isFree ? "" : "Sign in to upgrade to Premium from the dashboard Settings tab.");
                     document.getElementById("auth")?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                  style={{ width:"100%", background:plan.name==="Pro"?"#2457D6":"#fff", color:plan.name==="Pro"?"#fff":"#2457D6", border:plan.name==="Pro"?"none":"1px solid #BCD0FA", borderRadius:8, padding:"9px 11px", fontWeight:700, cursor:"pointer" }}
+                  style={{ width:"100%", background:plan.name==="Pro"?"var(--accent)":"#fff", color:plan.name==="Pro"?"#fff":"var(--accent)", border:plan.name==="Pro"?"none":"1px solid #BCD0FA", borderRadius:10, padding:"9px 11px", fontWeight:700, cursor:"pointer" }}
                 >
                   {plan.name === "Free" ? "Start free" : "Sign in to upgrade"}
                 </button>
@@ -453,7 +458,7 @@ function LandingPage({ onLogin }) {
           </div>
         </section>
 
-        <section id="faq" style={{ background:"#fff", border:"1px solid #DDE3EE", borderRadius:14, padding:24 }}>
+        <section id="faq" style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
           <h3 style={{ margin:"0 0 12px", fontSize:24, color:"#0F172A" }}>You&apos;ve got questions. We&apos;ve got answers.</h3>
           <div style={{ display:"grid", gap:10 }}>
             {[
@@ -468,7 +473,7 @@ function LandingPage({ onLogin }) {
             ))}
           </div>
           <div style={{ marginTop:14, fontSize:13, color:"#64748B" }}>
-            Need help now? <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ color:"#2457D6", fontWeight:700 }}>Contact support</a>
+            Need help now? <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ color:"var(--accent)", fontWeight:700 }}>Contact support</a>
           </div>
         </section>
       </main>
@@ -908,13 +913,13 @@ function createDocxBlob(text) {
   const coreProps = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <dc:title>Tailored Application</dc:title>
-  <dc:creator>Job Assistant</dc:creator>
-  <cp:lastModifiedBy>Job Assistant</cp:lastModifiedBy>
+  <dc:creator>Applyify</dc:creator>
+  <cp:lastModifiedBy>Applyify</cp:lastModifiedBy>
 </cp:coreProperties>`;
 
   const appProps = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-  <Application>Job Assistant</Application>
+  <Application>Applyify</Application>
 </Properties>`;
 
   const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -2464,12 +2469,6 @@ function AppShell({
     settings:  <SettingsView  subscription={subscription} onUpgrade={onUpgrade} onManageBilling={onManageBilling} billingBusy={billingBusy} billingError={billingError} userName={userName} />,
   };
   const activeMeta = nav.find((n)=>n.id===active) || nav[0];
-  const flow = [
-    { id: "profile", label: "Profile Defaults", done: !!((profile?.targetTitle || "").trim() && ((profile?.targetLocation || "").trim() || (profile?.location || "").trim())) },
-    { id: "search", label: "Job Search", done: jobs.length > 0 },
-    { id: "tracker", label: "Tracker", done: jobs.some((j)=>j.status === "tailored" || j.tailoredResume || j.tailoredCover) },
-  ];
-  const nextStep = flow.find((s)=>!s.done);
 
   return(
     <div style={{display:"flex",minHeight:"100vh",background:"var(--bg)"}}>
@@ -2479,7 +2478,7 @@ function AppShell({
             <div style={{width:40,height:40,borderRadius:11,background:"linear-gradient(135deg, var(--accent), #818CF8)",display:"grid",placeItems:"center",fontFamily:"Sora, DM Sans, sans-serif",fontSize:18,fontWeight:700,color:"#fff",boxShadow:"0 4px 12px -2px rgba(99, 102, 241, 0.25)"}}>
               J
             </div>
-            <div style={{fontFamily:"Sora, DM Sans, sans-serif",fontSize:17,fontWeight:600,color:T.text}}>Job Assistant</div>
+            <div style={{fontFamily:"Sora, DM Sans, sans-serif",fontSize:17,fontWeight:600,color:T.text}}>Applyify</div>
           </div>
         </div>
         <nav style={{display:"flex",flexDirection:"column",gap:6,padding:"22px 14px",flex:1,overflowY:"auto"}}>
@@ -2527,15 +2526,12 @@ function AppShell({
         <header style={{background:T.surface,borderBottom:"1px solid var(--border-light)",padding:"16px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:40}}>
           <div>
             <div style={{fontSize:20,fontWeight:700,color:T.text,fontFamily:"Sora, DM Sans, sans-serif"}}>{activeMeta.label}</div>
-            <div style={{fontSize:12,color:T.textSub}}>
-              {nextStep ? `Next: ${nextStep.label}` : "All core setup complete"}
-            </div>
+            <div style={{fontSize:12,color:T.textSub}}>All core setup complete</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textMute,border:`1px solid ${T.border}`,borderRadius:999,padding:"4px 10px"}}>
               {isPremiumSubscription(subscription) ? "Premium" : "Free"}
             </span>
-            {nextStep ? <Btn small onClick={()=>setActive(nextStep.id)}>Continue</Btn> : null}
           </div>
         </header>
         <div style={{flex:1,overflow:"hidden",background:"radial-gradient(circle at 0% 0%, #FFFFFF 0%, var(--bg) 55%)"}}>
