@@ -1803,8 +1803,8 @@ function TrackerView({jobs,setJobs,docs}){
     setTrackerErr("");
     try {
       const raw = await callClaude(
-        "You generate concise, professional, factual application content. Preserve readable structure with line breaks and bullet points. Return only JSON with keys: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score.",
-        `Job Description:\n${selectedTailorJob.description}\n\nResume:\n${resume?.content || "(not provided)"}\n\nCover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`
+        "You are an expert resume writer. Preserve formatting fidelity. Keep section headers and bullet structure. Never collapse into one paragraph. Return only valid JSON with keys: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score.",
+        `Job Description:\n${selectedTailorJob.description}\n\nResume (source of truth for structure):\n${resume?.content || "(not provided)"}\n\nCover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}\n\nFormatting requirements for tailored_resume_summary:\n1) Keep clear section blocks with line breaks between sections.\n2) Keep bullet lists as one bullet per line, prefixed with '- '.\n3) Keep role entries on separate lines (Company | Title | Dates).\n4) Do not use markdown code fences.\n5) Output plain text with preserved newlines inside JSON string.\n\nFormatting requirements for tailored_cover_letter:\n1) Keep greeting, 2-4 body paragraphs, and sign-off on separate lines.\n2) Preserve paragraph breaks with blank lines.\n3) Do not return markdown.`
       );
       let data;
       try {
