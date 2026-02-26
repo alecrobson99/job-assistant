@@ -1545,7 +1545,7 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
   const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
 
   return(
-    <div style={{flex:1,overflowY:"auto",overflowX:"hidden",background:T.bg,minHeight:0}}>
+    <div style={{flex:1,height:"100%",overflowY:"auto",overflowX:"hidden",background:T.bg,minHeight:0}}>
       <PH title="Profile" subtitle="Personal info, job preferences, and documents."/>
       <div style={{padding:"12px 28px 28px",maxWidth:1040,margin:"0 auto"}}>
 
