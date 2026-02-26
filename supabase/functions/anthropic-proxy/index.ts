@@ -95,7 +95,7 @@ serve(async (req) => {
 
     const { data: subscription, error: subErr } = await adminClient
       .from("billing_subscriptions")
-      .select("status,has_premium,tier")
+      .select("status,tier")
       .eq("user_id", user.id)
       .maybeSingle();
     if (subErr && subErr.code !== "PGRST116") {
