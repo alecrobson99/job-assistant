@@ -1789,14 +1789,39 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
 
     setLoading(true);setError("");setResults([]);
     try{
-      const jobsFromApi = await searchJobsByKeyword(finalQuery, {
+      let jobsFromApi = await searchJobsByKeyword(finalQuery, {
         page: 1,
         numPages: 2,
         country,
         datePosted,
       });
+
+      // Fallback: if profile-enriched query is too restrictive, retry with simpler terms.
+      if ((!jobsFromApi || jobsFromApi.length === 0) && finalQuery !== baseQuery) {
+        const relaxedQuery = locationValue ? `${baseQuery}, ${locationValue}` : baseQuery;
+        jobsFromApi = await searchJobsByKeyword(relaxedQuery, {
+          page: 1,
+          numPages: 2,
+          country,
+          datePosted,
+        });
+      }
+
+      // Final fallback: remove country restriction for global search text.
+      if (!jobsFromApi || jobsFromApi.length === 0) {
+        jobsFromApi = await searchJobsByKeyword(baseQuery, {
+          page: 1,
+          numPages: 2,
+          country: "",
+          datePosted,
+        });
+      }
+
       setResults(jobsFromApi);
       setSelectedJobIdx(0);
+      if (!jobsFromApi || jobsFromApi.length === 0) {
+        setError("No results found. Try broader keywords (e.g., remove seniority/industry terms).");
+      }
     }catch(e){setError(e?.message || "Search failed. Check job board API setup.");}
     setLoading(false);
   }
