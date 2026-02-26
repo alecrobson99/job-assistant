@@ -72,7 +72,7 @@ serve(async (req) => {
     // Prefer validation through the caller context, then fall back to admin.
     const [{ data: userData, error: userErr }, { data: adminData, error: adminErr }] =
       await Promise.all([
-        userClient.auth.getUser(),
+        userClient.auth.getUser(accessToken),
         adminClient.auth.getUser(accessToken),
       ]);
 
