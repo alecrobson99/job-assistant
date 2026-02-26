@@ -110,10 +110,28 @@ function isPremiumSubscription(subscription) {
   return status === "active" || status === "trialing";
 }
 
-async function searchJobsByKeyword(query) {
+function inferCountryParam(locationText) {
+  const v = String(locationText || "").toLowerCase();
+  if (!v) return "us,ca";
+  if (v.includes("canada") || /\b(on|bc|qc|ab|mb|sk|ns|nb|nl|pe|yt|nt|nu)\b/.test(v)) return "ca";
+  if (v.includes("united kingdom") || v.includes(" uk") || v.includes("london")) return "gb";
+  if (v.includes("australia") || v.includes("sydney") || v.includes("melbourne")) return "au";
+  if (v.includes("india") || v.includes("bengaluru") || v.includes("mumbai") || v.includes("hyderabad")) return "in";
+  if (v.includes("singapore")) return "sg";
+  if (v.includes("remote")) return "us,ca";
+  return "us";
+}
+
+async function searchJobsByKeyword(query, options = {}) {
+  const {
+    page = 1,
+    numPages = 1,
+    country = "us,ca",
+    datePosted = "all",
+  } = options;
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.functions.invoke("job-search", {
-    body: { query, page: 1, numPages: 1, country: "us", datePosted: "all" },
+    body: { query, page, numPages, country, datePosted },
   });
 
   if (error) {
@@ -1528,8 +1546,11 @@ function SearchView({jobs,setJobs,profile}){
   const [error,setError]=useState("");
   const [savingJobKey,setSavingJobKey]=useState("");
   const profileTitle = (profile?.targetTitle || "").trim();
+  const profileSeniority = (profile?.seniority || "").trim();
+  const profileIndustry = (profile?.industry || "").trim();
   const profileKeywords = (profile?.keywords || "").trim();
   const profileCompanies = (profile?.targetCompanies || "").trim();
+  const profileCulture = (profile?.lifestyleVibe || "").trim();
   const savedJobKeys = useMemo(
     () => new Set(jobs.map((j) => `${j.title || ""}::${j.company || ""}`)),
     [jobs]
@@ -1555,16 +1576,26 @@ function SearchView({jobs,setJobs,profile}){
       return;
     }
     const parts = [baseQuery];
-    if (searchLocation?.trim()) parts.push(searchLocation.trim());
+    const locationValue = searchLocation?.trim() || profile?.targetLocation?.trim() || profile?.location?.trim() || "";
+    if (locationValue) parts.push(locationValue);
     if (remoteOnly) parts.push("remote");
     if (datePosted !== "all") parts.push(`posted ${datePosted}`);
+    if (profileSeniority) parts.push(profileSeniority);
+    if (profileIndustry) parts.push(profileIndustry);
     if (profileKeywords) parts.push(profileKeywords);
-    if (profile?.useCompanyPrefs && profileCompanies) parts.push(profileCompanies);
+    if (profile?.useCompanyPrefs && profileCompanies) parts.push(`target companies: ${profileCompanies}`);
+    if (profile?.useCompanyPrefs && profileCulture) parts.push(`culture: ${profileCulture}`);
     const finalQuery = parts.join(", ");
+    const country = inferCountryParam(locationValue);
 
     setLoading(true);setError("");setResults([]);
     try{
-      const jobsFromApi = await searchJobsByKeyword(finalQuery);
+      const jobsFromApi = await searchJobsByKeyword(finalQuery, {
+        page: 1,
+        numPages: 2,
+        country,
+        datePosted,
+      });
       setResults(jobsFromApi);
       setSelectedJobIdx(0);
     }catch(e){setError(e?.message || "Search failed. Check job board API setup.");}
