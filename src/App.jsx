@@ -1732,6 +1732,8 @@ function SuggestedView(){
 function SearchView({jobs,setJobs,profile,onNavigate}){
   const [query,setQuery]=useState("");
   const [searchLocation,setSearchLocation]=useState(profile?.targetLocation || profile?.location || "");
+  const [queryTouched,setQueryTouched]=useState(false);
+  const [locationTouched,setLocationTouched]=useState(false);
   const [workMode,setWorkMode]=useState(profile?.workMode || "all");
   const [datePosted,setDatePosted]=useState("all");
   const [results,setResults]=useState([]);
@@ -1752,25 +1754,28 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
   const selectedJob = results[selectedJobIdx] || null;
 
   useEffect(() => {
-    if (!query && profileTitle) {
+    if (!queryTouched && !query && profileTitle) {
       setQuery(profileTitle);
     }
-  }, [query, profileTitle]);
+  }, [query, profileTitle, queryTouched]);
 
   useEffect(() => {
-    if (!searchLocation && (profile?.targetLocation || profile?.location)) {
-      setSearchLocation(profile.targetLocation || profile.location);
+    const profileLocation = profile?.targetLocation || profile?.location || "";
+    if (!locationTouched && !searchLocation && profileLocation) {
+      setSearchLocation(profileLocation);
     }
-  }, [profile, searchLocation]);
+  }, [profile, searchLocation, locationTouched]);
 
   async function search(){
-    const baseQuery = query.trim() || profileTitle;
+    const baseQuery = queryTouched ? query.trim() : (query.trim() || profileTitle);
     if(!baseQuery){
       setError("Enter a keyword or set a target title in Profile.");
       return;
     }
     const parts = [baseQuery];
-    const locationValue = searchLocation?.trim() || profile?.targetLocation?.trim() || profile?.location?.trim() || "";
+    const locationValue = locationTouched
+      ? (searchLocation?.trim() || "")
+      : (searchLocation?.trim() || profile?.targetLocation?.trim() || profile?.location?.trim() || "");
     if (locationValue) parts.push(locationValue);
     if (workMode !== "all") parts.push(workMode);
     if (datePosted !== "all") parts.push(`posted ${datePosted}`);
@@ -1820,9 +1825,9 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
       <PH title="Job Search" subtitle="Search roles, apply filters, preview details, then save to Tracker."/>
       <div style={{padding:"12px 28px 28px",maxWidth:1240,margin:"0 auto"}}>
         <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr auto",gap:10,marginBottom:10}}>
-          <TitleAutocomplete value={query} onChange={setQuery} placeholder='e.g. customer success, account manager, frontend engineer' compact
+          <TitleAutocomplete value={query} onChange={(v)=>{ setQuery(v); setQueryTouched(true); }} placeholder='e.g. customer success, account manager, frontend engineer' compact
             onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
-          <LocationAutocomplete value={searchLocation} onChange={setSearchLocation} placeholder="Location" compact />
+          <LocationAutocomplete value={searchLocation} onChange={(v)=>{ setSearchLocation(v); setLocationTouched(true); }} placeholder="Location" compact />
           <Btn onClick={search} disabled={loading} style={{height:40,padding:"0 20px"}}>
             {loading?<><Spinner color="#fff"/> Searching…</>:"Search"}
           </Btn>
@@ -1954,6 +1959,11 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
   const [newJobLocation,setNewJobLocation]=useState("");
   const [newJobDescription,setNewJobDescription]=useState("");
   const [selectedTrackerId,setSelectedTrackerId]=useState("");
+  const [expandedSections,setExpandedSections]=useState({
+    description: false,
+    resume: false,
+    cover: false,
+  });
   const premiumActive = isPremiumSubscription(subscription);
 
   async function updateStatus(id,status){
@@ -2136,6 +2146,18 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
       setSelectedTrackerId(filtered[0].id);
     }
   }, [filtered, selectedTrackerId]);
+
+  useEffect(() => {
+    setExpandedSections({
+      description: false,
+      resume: false,
+      cover: false,
+    });
+  }, [selectedTrackerId]);
+
+  function toggleSection(key) {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   function openTailorModal(job) {
     setTailorModalJobId(job.id);
@@ -2326,26 +2348,75 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
                       </div>
                     </div>
 
-                    <div style={{marginBottom:8}}>
-                      <FL>Job Description</FL>
-                      <TA
-                        value={job.description || ""}
-                        onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,description:v}:j))}
-                        rows={4}
-                        placeholder="Paste job description here if auto-scrape misses it..."
-                      />
-                      <div style={{marginTop:6}}>
-                        <Btn small variant="ghost" onClick={()=>saveDescription(job.id, jobs.find(j=>j.id===job.id)?.description || "")}>
-                          Save Description
-                        </Btn>
-                      </div>
+                    <div style={{marginBottom:8,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      <button
+                        type="button"
+                        onClick={()=>toggleSection("description")}
+                        style={{
+                          width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+                          border:"none",background:"#fff",padding:"10px 12px",cursor:"pointer",textAlign:"left",
+                        }}
+                      >
+                        <span style={{fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:"0.06em",textTransform:"uppercase"}}>Job Description</span>
+                        <span style={{fontSize:14,color:T.textMute}}>{expandedSections.description ? "▾" : "▸"}</span>
+                      </button>
+                      {expandedSections.description ? (
+                        <div style={{padding:"0 10px 10px",background:"#fff"}}>
+                          <TA
+                            value={job.description || ""}
+                            onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,description:v}:j))}
+                            rows={4}
+                            placeholder="Paste job description here if auto-scrape misses it..."
+                          />
+                          <div style={{marginTop:6}}>
+                            <Btn small variant="ghost" onClick={()=>saveDescription(job.id, jobs.find(j=>j.id===job.id)?.description || "")}>
+                              Save Description
+                            </Btn>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
-                    <div style={{marginBottom:10}}>
-                      <FL>Tailored Resume Summary</FL>
-                      <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
-                        {job.tailoredResume||<em>Not tailored yet.</em>}
-                      </div>
+                    <div style={{marginBottom:8,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      <button
+                        type="button"
+                        onClick={()=>toggleSection("resume")}
+                        style={{
+                          width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+                          border:"none",background:"#fff",padding:"10px 12px",cursor:"pointer",textAlign:"left",
+                        }}
+                      >
+                        <span style={{fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:"0.06em",textTransform:"uppercase"}}>Tailored Resume</span>
+                        <span style={{fontSize:14,color:T.textMute}}>{expandedSections.resume ? "▾" : "▸"}</span>
+                      </button>
+                      {expandedSections.resume ? (
+                        <div style={{padding:"0 10px 10px",background:"#fff"}}>
+                          <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+                            {job.tailoredResume||<em>Not tailored yet.</em>}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div style={{marginBottom:10,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      <button
+                        type="button"
+                        onClick={()=>toggleSection("cover")}
+                        style={{
+                          width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+                          border:"none",background:"#fff",padding:"10px 12px",cursor:"pointer",textAlign:"left",
+                        }}
+                      >
+                        <span style={{fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:"0.06em",textTransform:"uppercase"}}>Tailored Cover Letter</span>
+                        <span style={{fontSize:14,color:T.textMute}}>{expandedSections.cover ? "▾" : "▸"}</span>
+                      </button>
+                      {expandedSections.cover ? (
+                        <div style={{padding:"0 10px 10px",background:"#fff"}}>
+                          <div style={{fontSize:12,color:job.tailoredCover?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+                            {job.tailoredCover||<em>Not tailored yet.</em>}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
                     {(job.tailoredResume || job.tailoredCover) ? (
