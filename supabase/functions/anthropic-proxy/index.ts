@@ -91,6 +91,15 @@ serve(async (req) => {
       throw subErr;
     }
 
+    const { data: entitlements, error: entErr } = await adminClient
+      .from("user_entitlements")
+      .select("has_premium,tier")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (entErr && entErr.code !== "PGRST116" && entErr.code !== "42P01") {
+      throw entErr;
+    }
+
     // Plan enforcement:
     // - Pro (active/trialing): allow request
     // - Free/unpaid: consume quota atomically server-side before expensive call
@@ -99,7 +108,11 @@ serve(async (req) => {
     const usageType = body.usageType || "tailor";
     const shouldChargeUsage = usageType === "tailor";
 
-    if (!isPaidSubscription(subscription ?? null) && shouldChargeUsage) {
+    const premiumActive =
+      isPaidSubscription(subscription ?? null) ||
+      isPaidSubscription(entitlements ?? null);
+
+    if (!premiumActive && shouldChargeUsage) {
       const { error: quotaErr } = await userClient.rpc("consume_tailoring_use", {
         p_job_id: body.jobId || null,
       });

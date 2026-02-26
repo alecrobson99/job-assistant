@@ -685,7 +685,19 @@ const store = {
     // Keep app usable before billing.sql is applied.
     if (error?.code === "42P01" || (error?.message || "").includes("billing_subscriptions")) return null;
     if (error) throw error;
-    return data;
+    const { data: entitlements, error: entErr } = await supabase
+      .from("user_entitlements")
+      .select("has_premium,tier")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (entErr && entErr.code !== "PGRST116" && entErr.code !== "42P01") throw entErr;
+
+    return {
+      ...(data || {}),
+      has_premium: entitlements?.has_premium ?? data?.has_premium ?? false,
+      tier: entitlements?.tier ?? data?.tier ?? null,
+    };
   },
 
   getTailoringQuota: async () => {
