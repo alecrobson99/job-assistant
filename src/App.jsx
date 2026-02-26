@@ -1782,7 +1782,7 @@ function SearchView({jobs,setJobs,profile}){
                   <h2 style={{margin:"0 0 8px",fontSize:42,lineHeight:1.05,color:T.text,letterSpacing:"-0.7px"}}>{selectedJob.title}</h2>
                   <div style={{fontSize:16,color:T.textSub,marginBottom:12}}>{selectedJob.location}</div>
                   <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                    <Chip label={remoteOnly ? "Remote" : "Open"} color={T.teal} />
+                    <Chip label={workMode === "all" ? "Any work mode" : workMode} color={T.teal} />
                     <Chip label={datePosted === "all" ? "Any date" : datePosted} color={T.amber} />
                     <Chip label={selectedJob.source || "jsearch"} color={T.violet} />
                   </div>
