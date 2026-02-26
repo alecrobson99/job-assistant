@@ -1087,6 +1087,8 @@ function Sel({value,onChange,options,style:s}){
 
 function LocationAutocomplete({ value, onChange, placeholder = "City, state, or country", compact = false }) {
   const [open, setOpen] = useState(false);
+  const [remoteMatches, setRemoteMatches] = useState([]);
+  const [loadingRemote, setLoadingRemote] = useState(false);
   const wrapRef = useRef(null);
   const input = value || "";
   const q = input.trim().toLowerCase();
@@ -1098,6 +1100,57 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (q.length < 2 || q === "remote" || q === "hybrid" || q === "on-site") {
+      setRemoteMatches([]);
+      setLoadingRemote(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        setLoadingRemote(true);
+        const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&addressdetails=1&q=${encodeURIComponent(input.trim())}`;
+        const res = await fetch(url, {
+          method: "GET",
+          signal: controller.signal,
+          headers: {
+            "Accept-Language": "en",
+          },
+        });
+        if (!res.ok) throw new Error("Location search unavailable");
+        const data = await res.json();
+        const mapped = (Array.isArray(data) ? data : []).map((row) => {
+          const city =
+            row?.address?.city ||
+            row?.address?.town ||
+            row?.address?.village ||
+            row?.address?.hamlet ||
+            row?.name ||
+            "";
+          const state = row?.address?.state || row?.address?.province || "";
+          const country = row?.address?.country || "";
+          const label = [city, state, country].filter(Boolean).join(", ") || row?.display_name || "";
+          return {
+            label,
+            value: label,
+          };
+        }).filter((x) => x.value);
+        setRemoteMatches(mapped);
+      } catch {
+        setRemoteMatches([]);
+      } finally {
+        setLoadingRemote(false);
+      }
+    }, 280);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [q, input]);
 
   const matches = useMemo(() => {
     const pinned = [
@@ -1117,10 +1170,17 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
         };
       }),
     ];
-    const unique = Array.from(new Map(base.map((x) => [x.value, x])).values());
-    if (!q) return unique.slice(0, 8);
-    return unique.filter((x) => x.label.toLowerCase().includes(q)).slice(0, 10);
-  }, [q]);
+    const merged = [
+      ...base,
+      ...remoteMatches,
+    ];
+    const unique = Array.from(new Map(merged.map((x) => [x.value, x])).values());
+    const filtered = !q ? unique.slice(0, 8) : unique.filter((x) => x.label.toLowerCase().includes(q)).slice(0, 12);
+    const custom = q && !filtered.some((x) => x.value.toLowerCase() === q)
+      ? [{ label: `Use "${input.trim()}"`, value: input.trim() }]
+      : [];
+    return [...custom, ...filtered];
+  }, [q, input, remoteMatches]);
 
   return (
     <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
@@ -1149,7 +1209,11 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
           maxHeight: 220,
           overflowY: "auto",
         }}>
-          {matches.length === 0 ? (
+          {loadingRemote ? (
+            <div style={{ padding: "10px 12px", fontSize: 12, color: T.textMute }}>
+              Searching locations…
+            </div>
+          ) : matches.length === 0 ? (
             <div style={{ padding: "10px 12px", fontSize: 12, color: T.textMute }}>
               No matches. Press Enter to keep custom location.
             </div>
@@ -1200,9 +1264,12 @@ function TitleAutocomplete({ value, onChange, placeholder = "Search job title", 
 
   const matches = useMemo(() => {
     const options = Array.from(new Set([...OCCUPATION_OPTIONS, ...TITLE_OPTIONS]));
-    if (!q) return options.slice(0, 10);
-    return options.filter((x) => x.toLowerCase().includes(q)).slice(0, 12);
-  }, [q]);
+    const filtered = !q ? options.slice(0, 10) : options.filter((x) => x.toLowerCase().includes(q)).slice(0, 12);
+    const custom = q && !filtered.some((x) => x.toLowerCase() === q)
+      ? [`Use "${input.trim()}"`]
+      : [];
+    return [...custom, ...filtered];
+  }, [q, input]);
 
   return (
     <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
@@ -1240,7 +1307,11 @@ function TitleAutocomplete({ value, onChange, placeholder = "Search job title", 
               key={m}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onChange(m); setOpen(false); }}
+              onClick={() => {
+                const v = m.startsWith('Use "') && m.endsWith('"') ? input.trim() : m;
+                onChange(v);
+                setOpen(false);
+              }}
               style={{
                 width: "100%",
                 textAlign: "left",
@@ -1527,7 +1598,28 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
                 ]}
               />
             </div>
-            {renderField("Seniority Level","seniority","Senior, Mid-level, Entry")}
+            <div style={{marginBottom:14}}>
+              <FL>Seniority Level</FL>
+              <Sel
+                value={profile.seniority || ""}
+                onChange={(v)=>up("seniority",v)}
+                options={[
+                  { value: "", label: "Select seniority" },
+                  { value: "Internship", label: "Internship" },
+                  { value: "Entry-level", label: "Entry-level" },
+                  { value: "Associate", label: "Associate" },
+                  { value: "Mid-level", label: "Mid-level" },
+                  { value: "Senior", label: "Senior" },
+                  { value: "Lead", label: "Lead" },
+                  { value: "Staff", label: "Staff" },
+                  { value: "Principal", label: "Principal" },
+                  { value: "Manager", label: "Manager" },
+                  { value: "Director", label: "Director" },
+                  { value: "VP", label: "VP" },
+                  { value: "C-level", label: "C-level" },
+                ]}
+              />
+            </div>
             {renderField("Industries","industry","SaaS, Fintech, Healthcare")}
             <div style={{marginBottom:14}}><FL>Keywords to Highlight</FL>
               <TA value={profile.keywords||""} onChange={v=>up("keywords",v)} placeholder="agile, roadmap, SQL..." rows={2}/>
