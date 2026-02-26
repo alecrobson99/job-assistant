@@ -16,6 +16,7 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
     const appUrl = Deno.env.get("APP_URL");
@@ -26,14 +27,13 @@ serve(async (req) => {
 
     const missingEnv: string[] = [];
     if (!supabaseUrl) missingEnv.push("SUPABASE_URL");
+    if (!supabaseAnonKey) missingEnv.push("SUPABASE_ANON_KEY");
     if (!serviceRoleKey) missingEnv.push("SUPABASE_SERVICE_ROLE_KEY");
     if (!stripeSecretKey) missingEnv.push("STRIPE_SECRET_KEY");
     if (!appUrl) missingEnv.push("APP_URL");
     if (missingEnv.length > 0) {
       throw new Error(`Missing required environment variables: ${missingEnv.join(", ")}`);
     }
-
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
     const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -45,16 +45,36 @@ serve(async (req) => {
       });
     }
 
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
     const {
-      data: { user },
-      error: userErr,
+      data: { user: userFromAnon },
+      error: anonErr,
+    } = await userClient.auth.getUser();
+
+    const {
+      data: { user: userFromAdmin },
+      error: adminErr,
     } = await adminClient.auth.getUser(accessToken);
 
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: userErr?.message || "Unauthorized" }), {
+    const user = userFromAnon ?? userFromAdmin ?? null;
+
+    if (!user) {
+      return new Response(
+        JSON.stringify({
+          error:
+            anonErr?.message ||
+            adminErr?.message ||
+            "Unauthorized",
+        }),
+        {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        },
+      );
     }
 
     if (!user.email_confirmed_at) {
