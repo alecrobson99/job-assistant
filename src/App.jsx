@@ -273,25 +273,21 @@ function LandingPage({ onLogin }) {
     USD: {
       monthly: [
         { name: "Free", price: 0, sub: "For individual job seekers getting started." },
-        { name: "Pro", price: 29, sub: "For active applicants who tailor at scale." },
-        { name: "Team", price: 99, sub: "For coaches and small teams managing candidates." },
+        { name: "Pro", price: 19.99, sub: "For active applicants who tailor at scale." },
       ],
       yearly: [
         { name: "Free", price: 0, sub: "For individual job seekers getting started." },
-        { name: "Pro", price: 24, sub: "Billed annually. Save with higher usage." },
-        { name: "Team", price: 82, sub: "Billed annually. Shared workflows included." },
+        { name: "Pro", price: 19.99, sub: "Billed annually. Save with higher usage." },
       ],
     },
     CAD: {
       monthly: [
         { name: "Free", price: 0, sub: "For individual job seekers getting started." },
-        { name: "Pro", price: 39, sub: "For active applicants who tailor at scale." },
-        { name: "Team", price: 129, sub: "For coaches and small teams managing candidates." },
+        { name: "Pro", price: 19.99, sub: "For active applicants who tailor at scale." },
       ],
       yearly: [
         { name: "Free", price: 0, sub: "For individual job seekers getting started." },
-        { name: "Pro", price: 32, sub: "Billed annually. Save with higher usage." },
-        { name: "Team", price: 108, sub: "Billed annually. Shared workflows included." },
+        { name: "Pro", price: 19.99, sub: "Billed annually. Save with higher usage." },
       ],
     },
   };
