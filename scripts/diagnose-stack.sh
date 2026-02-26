@@ -27,7 +27,11 @@ check_absent_file() {
 contains() {
   local path="$1"
   local pattern="$2"
-  if rg -q "$pattern" "$path"; then return 0; fi
+  if command -v rg >/dev/null 2>&1; then
+    if rg -q "$pattern" "$path"; then return 0; fi
+  else
+    if grep -Eq "$pattern" "$path"; then return 0; fi
+  fi
   return 1
 }
 
