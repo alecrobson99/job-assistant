@@ -8,6 +8,7 @@ type ProxyPayload = {
   maxTokens?: number;
   model?: string;
   jobId?: string;
+  usageType?: "tailor" | "extract";
   messages?: Array<{ role: string; content: unknown }>;
 };
 
@@ -90,7 +91,10 @@ serve(async (req) => {
     // - Free/unpaid: consume quota atomically server-side before expensive call
     const body = (await req.json().catch(() => ({}))) as ProxyPayload;
 
-    if (!isPaidStatus(subscription?.status ?? "inactive")) {
+    const usageType = body.usageType || "tailor";
+    const shouldChargeUsage = usageType === "tailor";
+
+    if (!isPaidStatus(subscription?.status ?? "inactive") && shouldChargeUsage) {
       const { error: quotaErr } = await userClient.rpc("consume_tailoring_use", {
         p_job_id: body.jobId || null,
       });

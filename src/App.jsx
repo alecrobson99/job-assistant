@@ -34,6 +34,10 @@ const LOCATION_OPTIONS = [
   "Remote",
   "Hybrid",
   "On-site",
+  "Toronto, ON, Canada",
+  "Vancouver, BC, Canada",
+  "Montreal, QC, Canada",
+  "Calgary, AB, Canada",
   "New York, NY",
   "San Francisco, CA",
   "Chicago, IL",
@@ -625,7 +629,8 @@ function downloadBlob(blob, filename) {
 
 function buildTailoredText(job, type) {
   const heading = type === "resume" ? "Tailored Resume" : "Tailored Cover Letter";
-  const body = type === "resume" ? (job.tailoredResume || "") : (job.tailoredCover || "");
+  const bodyRaw = type === "resume" ? (job.tailoredResume || "") : (job.tailoredCover || "");
+  const body = String(bodyRaw).replace(/\r\n/g, "\n").trim();
   return `${heading}\n\nJob: ${job.title || "Unknown Role"}\nCompany: ${job.company || "Unknown Company"}\nLocation: ${job.location || "Unknown"}\n\n${body}`.trim();
 }
 
@@ -639,11 +644,11 @@ function downloadTailoredArtifact(job, type, format) {
   }
 
   if (format === "pdf") {
-    // MVP export: plain-text payload with .pdf extension for quick portability.
+    // Keep line breaks/bullets intact in exported text payload.
     return downloadBlob(new Blob([text], { type: "application/pdf" }), `${base}.pdf`);
   }
 
-  // MVP export: plain-text payload with .docx extension.
+  // Keep line breaks/bullets intact in exported text payload.
   return downloadBlob(
     new Blob([text], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
     `${base}.docx`
@@ -716,10 +721,15 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
   }, []);
 
   const matches = useMemo(() => {
-    const base = [
+    const pinned = [
       { label: "Remote", value: "Remote" },
       { label: "Hybrid", value: "Hybrid" },
       { label: "On-site", value: "On-site" },
+      { label: "Toronto, ON, Canada", value: "Toronto, ON, Canada" },
+      { label: "Vancouver, BC, Canada", value: "Vancouver, BC, Canada" },
+    ];
+    const base = [
+      ...pinned,
       ...LOCATION_CATALOG.map((loc) => {
         const region = loc.region ? `, ${loc.region}` : "";
         return {
@@ -911,6 +921,7 @@ function FileUpBtn({onText,label="Upload .txt/.pdf"}){
         const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
         const { data: d, error } = await supabase.functions.invoke("anthropic-proxy", {
           body: {
+            usageType: "extract",
             model: "claude-sonnet-4-20250514",
             maxTokens: 3000,
             messages: [{
@@ -1459,11 +1470,8 @@ function TrackerView({jobs,setJobs,docs}){
     setTailorLoading(true);
     setTrackerErr("");
     try {
-      const updatedQuota = await store.consumeTailoringUse(selectedTailorJob.id);
-      setQuota(updatedQuota);
-
       const raw = await callClaude(
-        "You generate concise, professional, factual application content. Return only JSON with keys: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score.",
+        "You generate concise, professional, factual application content. Preserve readable structure with line breaks and bullet points. Return only JSON with keys: tailored_resume_summary, tailored_cover_letter, keyword_alignment (array), skills_match_summary, match_score.",
         `Job Description:\n${selectedTailorJob.description}\n\nResume:\n${resume?.content || "(not provided)"}\n\nCover Letter:\n${cover?.content || "(not provided)"}\n\nCandidate notes:\n- Excitement: ${tailorInputs.excitement}\n- Emphasize: ${tailorInputs.emphasis}\n- De-emphasize: ${tailorInputs.avoid || "None"}`
       );
       let data;
@@ -1473,8 +1481,8 @@ function TrackerView({jobs,setJobs,docs}){
         throw new Error("AI response format error. Please try again.");
       }
       const updates = {
-        tailoredResume: data.tailored_resume_summary || "",
-        tailoredCover: data.tailored_cover_letter || "",
+        tailoredResume: String(data.tailored_resume_summary || "").replace(/\r\n/g, "\n").trim(),
+        tailoredCover: String(data.tailored_cover_letter || "").replace(/\r\n/g, "\n").trim(),
         keywords: Array.isArray(data.keyword_alignment) ? data.keyword_alignment : [],
         matchScore: Number.isFinite(data.match_score) ? data.match_score : null,
         resumeDocId: resume?.id || null,
@@ -1483,6 +1491,8 @@ function TrackerView({jobs,setJobs,docs}){
       };
       const dbRow = await store.updateJob(selectedTailorJob.id, updates);
       setJobs((prev) => prev.map((j) => (j.id === selectedTailorJob.id ? { ...j, ...dbRow } : j)));
+      const refreshedQuota = await store.getTailoringQuota();
+      setQuota(refreshedQuota);
       setTrackerMsg("Tailored application generated.");
       setTimeout(()=>setTrackerMsg(""),2000);
       setTailorModalJobId(null);
@@ -1576,10 +1586,55 @@ function TrackerView({jobs,setJobs,docs}){
 
                   <div style={{marginBottom:10}}>
                     <FL>Tailored Resume Summary</FL>
-                    <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6}}>
+                    <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
                       {job.tailoredResume||<em>Not tailored yet.</em>}
                     </div>
                   </div>
+
+                  {job.tailoredCover ? (
+                    <div style={{marginBottom:10}}>
+                      <FL>Tailored Cover Letter</FL>
+                      <div style={{fontSize:12,color:T.textSub,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+                        {job.tailoredCover}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {(job.tailoredResume || job.tailoredCover) ? (
+                    <div style={{marginBottom:10,display:"grid",gap:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:11,color:T.textMute,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase"}}>Export format</span>
+                        <Sel
+                          value={downloadFormatByJob[job.id] || "txt"}
+                          onChange={(v)=>setDownloadFormat(job.id, v)}
+                          options={[
+                            { value: "txt", label: ".txt" },
+                            { value: "docx", label: ".docx" },
+                            { value: "pdf", label: ".pdf" },
+                          ]}
+                          style={{width:120,padding:"5px 8px",fontSize:12}}
+                        />
+                      </div>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        <Btn
+                          small
+                          variant="ghost"
+                          disabled={!job.tailoredResume}
+                          onClick={()=>downloadArtifact(job, "resume")}
+                        >
+                          Download Resume
+                        </Btn>
+                        <Btn
+                          small
+                          variant="ghost"
+                          disabled={!job.tailoredCover}
+                          onClick={()=>downloadArtifact(job, "cover")}
+                        >
+                          Download Cover
+                        </Btn>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {job.url&&<div style={{marginBottom:10}}><a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:600}}>↗ View Listing</a></div>}
 
