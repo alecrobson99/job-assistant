@@ -2535,14 +2535,14 @@ function AppShell({
             <div style={{fontSize:11,fontWeight:700,opacity:0.75,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:5}}>Plan</div>
             <div style={{fontSize:15,fontWeight:700,marginBottom:10}}>{isPremiumSubscription(subscription) ? "Premium Active" : "Free Plan"}</div>
             <button
-              onClick={isPremiumSubscription(subscription) ? ()=>onManageBilling() : ()=>onUpgrade("monthly")}
+              onClick={isPremiumSubscription(subscription) ? ()=>onManageBilling() : ()=>setActive("settings")}
               disabled={billingBusy}
               style={{
                 width:"100%",padding:"9px 10px",background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.24)",
                 color:"#fff",borderRadius:8,fontSize:12,fontWeight:600,cursor:billingBusy?"not-allowed":"pointer",fontFamily:"inherit"
               }}
             >
-              {billingBusy ? "Working..." : isPremiumSubscription(subscription) ? "Manage Subscription" : "Upgrade to Premium"}
+              {billingBusy ? "Working..." : isPremiumSubscription(subscription) ? "Manage Subscription" : "Choose Premium Plan"}
             </button>
           </div>
           {billingError ? (
