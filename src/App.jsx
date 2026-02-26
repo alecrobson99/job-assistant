@@ -2615,8 +2615,18 @@ export default function App(){
     setBillingError("");
     try {
       const supabase = getSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Your session expired. Please sign in again.");
+      }
       const { data, error } = await supabase.functions.invoke("create-checkout-session", {
         body: { billingCycle },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        },
       });
       if (error) throw error;
       if (!data?.url) throw new Error("Checkout URL was not returned.");
@@ -2632,7 +2642,18 @@ export default function App(){
     setBillingError("");
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase.functions.invoke("create-portal-session");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Your session expired. Please sign in again.");
+      }
+      const { data, error } = await supabase.functions.invoke("create-portal-session", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        },
+      });
       if (error) throw error;
       if (!data?.url) throw new Error("Billing portal URL was not returned.");
       window.location.assign(data.url);
