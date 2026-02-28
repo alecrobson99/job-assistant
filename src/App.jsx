@@ -7,15 +7,17 @@ import { getSupabaseClient } from "./supabase";
 // ═══════════════════════════════════════════════════════════════════════════════
 const T = {
   bg: "var(--bg)", surface: "var(--surface)",
+  surface2: "var(--surface-2)", surface3: "var(--surface-3)",
   border: "var(--border)", borderFocus: "var(--accent)",
   primary: "var(--accent)", primaryDark: "var(--accent-hover)",
-  primaryLight: "#EEF3FD", primaryMid: "#C7D8FA",
+  primaryLight: "var(--accent-soft)", primaryMid: "var(--accent-soft-border)",
+  focusRing: "var(--accent-secondary)",
   text: "var(--text-primary)", textSub: "var(--text-secondary)", textMute: "var(--text-tertiary)",
-  green: "#16A34A", greenBg: "#F0FDF4", greenBorder: "#BBF7D0",
-  amber: "#B45309", amberBg: "#FFFBEB", amberBorder: "#FDE68A",
-  red: "#DC2626", redBg: "#FEF2F2", redBorder: "#FECACA",
-  teal: "#0D7490", tealBg: "#F0FDFF", tealBorder: "#A5F3FC",
-  violet: "#7C3AED", violetBg: "#F5F3FF", violetBorder: "#DDD6FE",
+  green: "var(--success)", greenBg: "var(--success-soft)", greenBorder: "var(--success-border)",
+  amber: "var(--warning)", amberBg: "var(--warning-soft)", amberBorder: "var(--warning-border)",
+  red: "var(--error)", redBg: "var(--error-soft)", redBorder: "var(--error-border)",
+  teal: "var(--info)", tealBg: "var(--info-soft)", tealBorder: "var(--info-border)",
+  violet: "var(--accent-secondary)", violetBg: "var(--accent-secondary-soft)", violetBorder: "var(--warning-border)",
 };
 
 const STATUS_META = {
@@ -155,6 +157,13 @@ async function searchJobsByKeyword(query, options = {}) {
       description: job.job_description || job.description || job.summary || "",
       apply_url: job.job_apply_link || job.job_google_link || job.apply_url || job.url || job.applyUrl || "",
       source: job.job_publisher || job.source || job.board || "jsearch",
+      compensation:
+        job.salary || job.salary_text || job.compensation ||
+        (job.job_min_salary && job.job_max_salary
+          ? `${job.job_min_salary}-${job.job_max_salary}/${job.job_salary_period || "yr"}`
+          : job.job_min_salary
+            ? `${job.job_min_salary}/${job.job_salary_period || "yr"}`
+            : ""),
     };
   });
 }
@@ -256,12 +265,12 @@ function LandingPage({ onLogin }) {
   };
   const inputStyle = {
     width: "100%",
-    background: "#FFFFFF",
-    border: "1px solid #D0D7E2",
+    background: "var(--surface-2)",
+    border: "1px solid var(--border)",
     borderRadius: 8,
     padding: "11px 12px",
     fontSize: 14,
-    color: "#111827",
+    color: "var(--text-primary)",
     outline: "none",
     transition: "border-color 0.15s",
     fontFamily: "inherit",
@@ -292,27 +301,27 @@ function LandingPage({ onLogin }) {
   };
   
   return (
-    <div style={{ minHeight:"100vh", background:"var(--bg)", padding:"20px 16px 44px" }}>
+    <div style={{ minHeight:"100vh", background:"transparent", padding:"20px 16px 44px" }}>
       <main style={{ maxWidth:1160, margin:"0 auto", display:"grid", gap:20 }}>
-        <header style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", boxShadow:"var(--shadow-sm)" }}>
+        <header style={{ background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)", border:"1px solid var(--border)", borderRadius:16, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", boxShadow:"var(--shadow-sm)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:34, height:34, borderRadius:10, background:"linear-gradient(135deg, var(--accent), #818CF8)", color:"#fff", display:"grid", placeItems:"center", fontFamily:"Sora, DM Sans, sans-serif", fontSize:16, fontWeight:700 }}>
+            <div style={{ width:34, height:34, borderRadius:10, background:"linear-gradient(135deg, var(--accent), var(--accent-hover))", color:"#fff", display:"grid", placeItems:"center", fontFamily:"var(--font-display)", fontSize:16, fontWeight:700, boxShadow:"0 0 24px -10px var(--glow-accent)" }}>
               A
             </div>
-            <div style={{ fontFamily:"Sora, DM Sans, sans-serif", fontSize:20, fontWeight:700, color:"var(--text-primary)" }}>Applyify</div>
+            <div style={{ fontFamily:"var(--font-display)", fontSize:20, fontWeight:700, color:"var(--text-primary)" }}>Applyify</div>
           </div>
           <nav style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <a href="#product" style={{ textDecoration:"none", color:"var(--text-secondary)", fontSize:13, fontWeight:650, padding:"7px 11px", border:"1px solid var(--border)", borderRadius:9 }}>Product</a>
             <a href="#pricing" style={{ textDecoration:"none", color:"var(--text-secondary)", fontSize:13, fontWeight:650, padding:"7px 11px", border:"1px solid var(--border)", borderRadius:9 }}>Pricing</a>
             <a href="#faq" style={{ textDecoration:"none", color:"var(--text-secondary)", fontSize:13, fontWeight:650, padding:"7px 11px", border:"1px solid var(--border)", borderRadius:9 }}>FAQ</a>
-            <button onClick={()=>setIsLogin(true)} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:9, padding:"8px 13px", fontWeight:700, cursor:"pointer", fontSize:13 }}>Sign in</button>
+            <button onClick={()=>setIsLogin(true)} style={{ background:"linear-gradient(135deg, var(--accent), var(--accent-hover))", color:"#fff", border:"none", borderRadius:9, padding:"8px 13px", fontWeight:700, cursor:"pointer", fontSize:13, boxShadow:"0 12px 26px -12px var(--glow-accent)" }}>Sign in</button>
           </nav>
         </header>
 
         <section id="product" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(360px,1fr))", gap:18 }}>
-          <div style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:28, boxShadow:"var(--shadow-sm)" }}>
+          <div style={{ background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)", border:"1px solid var(--border)", borderRadius:16, padding:28, boxShadow:"var(--shadow-sm)" }}>
             <div style={{ fontSize:12, fontWeight:800, color:"var(--text-secondary)", marginBottom:10, letterSpacing:"0.06em" }}>JOB SEARCH CRM + TAILORING</div>
-            <h1 style={{ fontFamily:"Sora, DM Sans, sans-serif", fontSize:52, lineHeight:1.04, margin:"0 0 12px", color:"var(--text-primary)", letterSpacing:"-0.05em" }}>
+            <h1 style={{ fontFamily:"var(--font-display)", fontSize:52, lineHeight:1.04, margin:"0 0 12px", color:"var(--text-primary)", letterSpacing:"-0.04em" }}>
               Find, track, and tailor applications in one workspace.
             </h1>
             <p style={{ fontSize:15, lineHeight:1.65, color:"var(--text-secondary)", margin:"0 0 16px", maxWidth:700 }}>
@@ -325,13 +334,13 @@ function LandingPage({ onLogin }) {
                 "Document management",
                 "Built-in weekly usage controls",
               ].map((item) => (
-                <div key={item} style={{ border:"1px solid var(--border)", borderRadius:10, padding:"10px 12px", background:"var(--bg)", fontSize:13, color:"var(--text-secondary)", fontWeight:600 }}>
+                <div key={item} style={{ border:"1px solid var(--border)", borderRadius:10, padding:"10px 12px", background:"var(--surface-3)", fontSize:13, color:"var(--text-secondary)", fontWeight:600 }}>
                   {item}
                 </div>
               ))}
             </div>
             <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-              <button onClick={()=>setIsLogin(false)} style={{ background:"var(--accent)", color:"#fff", border:"none", borderRadius:10, padding:"10px 14px", fontWeight:700, cursor:"pointer" }}>
+              <button onClick={()=>setIsLogin(false)} style={{ background:"linear-gradient(135deg, var(--accent), var(--accent-hover))", color:"#fff", border:"none", borderRadius:10, padding:"10px 14px", fontWeight:700, cursor:"pointer", boxShadow:"0 16px 34px -14px var(--glow-accent)" }}>
                 Create free account
               </button>
               <a href="#pricing" style={{ display:"inline-flex", alignItems:"center", padding:"10px 14px", border:"1px solid var(--border)", borderRadius:10, color:"var(--text-secondary)", textDecoration:"none", fontWeight:700 }}>
@@ -340,8 +349,8 @@ function LandingPage({ onLogin }) {
             </div>
           </div>
 
-          <section id="auth" style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
-            <h2 style={{ fontSize:34, margin:"0 0 6px", color:"var(--text-primary)", letterSpacing:"-0.03em", fontFamily:"Sora, DM Sans, sans-serif" }}>
+          <section id="auth" style={{ background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)", border:"1px solid var(--border)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
+            <h2 style={{ fontSize:34, margin:"0 0 6px", color:"var(--text-primary)", letterSpacing:"-0.03em", fontFamily:"var(--font-display)" }}>
               {isLogin ? "Sign in" : "Create account"}
             </h2>
             <p style={{ fontSize:13, color:"var(--text-secondary)", margin:"0 0 16px" }}>
@@ -349,15 +358,15 @@ function LandingPage({ onLogin }) {
             </p>
 
             {infoMsg && (
-              <div style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8,
-                padding:"10px 12px", marginBottom:14, fontSize:13, color:"#1D4ED8" }} role="status" aria-live="polite">
+              <div style={{ background:"var(--info-soft)", border:"1px solid var(--info-border)", borderRadius:8,
+                padding:"10px 12px", marginBottom:14, fontSize:13, color:"var(--info)" }} role="status" aria-live="polite">
                 {infoMsg}
               </div>
             )}
 
             {error && (
-              <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8,
-                padding:"10px 12px", marginBottom:14, fontSize:13, color:"#DC2626" }} role="alert" aria-live="assertive">
+              <div style={{ background:"var(--error-soft)", border:"1px solid var(--error-border)", borderRadius:8,
+                padding:"10px 12px", marginBottom:14, fontSize:13, color:"var(--error)" }} role="alert" aria-live="assertive">
                 {error}
               </div>
             )}
@@ -385,7 +394,7 @@ function LandingPage({ onLogin }) {
               </div>
 
               <button type="submit" disabled={loading} style={{
-                width:"100%", background:loading?"#94A3B8":"var(--accent)", color:"#fff", border:"none", borderRadius:10,
+                width:"100%", background:loading?"#59617a":"linear-gradient(135deg, var(--accent), var(--accent-hover))", color:"#fff", border:"none", borderRadius:10,
                 padding:"10px 12px", fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer", fontFamily:"inherit"
               }}>
                 {loading ? "Please wait..." : (isLogin ? "Try the tool" : "Create account")}
@@ -403,36 +412,36 @@ function LandingPage({ onLogin }) {
           </section>
         </section>
 
-        <section id="pricing" style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
+        <section id="pricing" style={{ background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)", border:"1px solid var(--border)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:14, flexWrap:"wrap", marginBottom:14 }}>
             <div>
-              <h2 style={{ fontSize:30, margin:"0 0 6px", color:"#0F172A", letterSpacing:"-0.02em" }}>Simple pricing that scales with your search</h2>
-              <p style={{ fontSize:14, color:"#64748B", margin:0 }}>Start free. Upgrade when you need higher throughput and premium workflows.</p>
+              <h2 style={{ fontSize:30, margin:"0 0 6px", color:"var(--text-primary)", letterSpacing:"-0.02em" }}>Simple pricing that scales with your search</h2>
+              <p style={{ fontSize:14, color:"var(--text-secondary)", margin:0 }}>Start free. Upgrade when you need higher throughput and premium workflows.</p>
             </div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              <div style={{ display:"inline-flex", border:"1px solid #D0D7E2", borderRadius:999, overflow:"hidden" }}>
-                <button onClick={()=>setBillingCycle("monthly")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:billingCycle==="monthly"?"#2457D6":"#fff", color:billingCycle==="monthly"?"#fff":"#334155", cursor:"pointer" }}>Monthly</button>
-                <button onClick={()=>setBillingCycle("yearly")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:billingCycle==="yearly"?"#2457D6":"#fff", color:billingCycle==="yearly"?"#fff":"#334155", cursor:"pointer" }}>Yearly</button>
+              <div style={{ display:"inline-flex", border:"1px solid var(--border)", borderRadius:999, overflow:"hidden" }}>
+                <button onClick={()=>setBillingCycle("monthly")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:billingCycle==="monthly"?"var(--accent)":"var(--surface-2)", color:billingCycle==="monthly"?"#fff":"var(--text-secondary)", cursor:"pointer" }}>Monthly</button>
+                <button onClick={()=>setBillingCycle("yearly")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:billingCycle==="yearly"?"var(--accent)":"var(--surface-2)", color:billingCycle==="yearly"?"#fff":"var(--text-secondary)", cursor:"pointer" }}>Yearly</button>
               </div>
-              <div style={{ display:"inline-flex", border:"1px solid #D0D7E2", borderRadius:999, overflow:"hidden" }}>
-                <button onClick={()=>setCurrency("USD")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:currency==="USD"?"#2457D6":"#fff", color:currency==="USD"?"#fff":"#334155", cursor:"pointer" }}>USD</button>
-                <button onClick={()=>setCurrency("CAD")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:currency==="CAD"?"#2457D6":"#fff", color:currency==="CAD"?"#fff":"#334155", cursor:"pointer" }}>CAD</button>
+              <div style={{ display:"inline-flex", border:"1px solid var(--border)", borderRadius:999, overflow:"hidden" }}>
+                <button onClick={()=>setCurrency("USD")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:currency==="USD"?"var(--accent-secondary)":"var(--surface-2)", color:currency==="USD"?"var(--text-inverse)":"var(--text-secondary)", cursor:"pointer" }}>USD</button>
+                <button onClick={()=>setCurrency("CAD")} style={{ border:"none", padding:"8px 12px", fontSize:12, fontWeight:700, background:currency==="CAD"?"var(--accent-secondary)":"var(--surface-2)", color:currency==="CAD"?"var(--text-inverse)":"var(--text-secondary)", cursor:"pointer" }}>CAD</button>
               </div>
             </div>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:12 }}>
             {pricing[currency][billingCycle].map((plan) => (
-              <div key={plan.name} style={{ border:"1px solid #DCE4F2", borderRadius:12, padding:16, background:plan.name==="Pro"?"#F4F8FF":"#fff" }}>
-                <div style={{ fontSize:12, fontWeight:800, color:"#5C6B8A", letterSpacing:"0.05em", marginBottom:8 }}>{plan.name.toUpperCase()}</div>
-                <div style={{ fontSize:34, fontWeight:800, color:"#0F172A", lineHeight:1 }}>
+              <div key={plan.name} style={{ border:`1px solid ${plan.name==="Pro" ? "var(--accent-soft-border)" : "var(--border)"}`, borderRadius:12, padding:16, background:plan.name==="Pro"?"var(--accent-soft)":"var(--surface-2)" }}>
+                <div style={{ fontSize:12, fontWeight:800, color:"var(--text-tertiary)", letterSpacing:"0.05em", marginBottom:8 }}>{plan.name.toUpperCase()}</div>
+                <div style={{ fontSize:34, fontWeight:800, color:"var(--text-primary)", lineHeight:1 }}>
                   {plan.price === 0 ? "Free" : `${currency === "USD" ? "$" : "C$"}${plan.price}`}
                 </div>
-                <div style={{ fontSize:12, color:"#64748B", marginTop:6, minHeight:34 }}>
+                <div style={{ fontSize:12, color:"var(--text-secondary)", marginTop:6, minHeight:34 }}>
                   {plan.price === 0 ? "No credit card required" : `${currency}/${billingCycle === "monthly" ? "mo" : "mo billed yearly"}`}
                 </div>
-                <p style={{ fontSize:13, color:"#475569", lineHeight:1.55, margin:"8px 0 12px" }}>{plan.sub}</p>
-                <ul style={{ margin:"0 0 12px 16px", padding:0, color:"#334155", lineHeight:1.6, fontSize:12 }}>
+                <p style={{ fontSize:13, color:"var(--text-secondary)", lineHeight:1.55, margin:"8px 0 12px" }}>{plan.sub}</p>
+                <ul style={{ margin:"0 0 12px 16px", padding:0, color:"var(--text-secondary)", lineHeight:1.6, fontSize:12 }}>
                   <li>Job search and tracker workflow</li>
                   <li>Document upload and management</li>
                   <li>{plan.name === "Free" ? "Weekly tailoring limits" : "Higher or unlimited tailoring usage"}</li>
@@ -444,7 +453,7 @@ function LandingPage({ onLogin }) {
                     setInfoMsg(isFree ? "" : "Sign in to upgrade to Premium from the dashboard Settings tab.");
                     document.getElementById("auth")?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                  style={{ width:"100%", background:plan.name==="Pro"?"var(--accent)":"#fff", color:plan.name==="Pro"?"#fff":"var(--accent)", border:plan.name==="Pro"?"none":"1px solid #BCD0FA", borderRadius:10, padding:"9px 11px", fontWeight:700, cursor:"pointer" }}
+                  style={{ width:"100%", background:plan.name==="Pro"?"linear-gradient(135deg, var(--accent), var(--accent-hover))":"var(--surface-3)", color:plan.name==="Pro"?"#fff":"var(--accent)", border:plan.name==="Pro"?"none":"1px solid var(--accent-soft-border)", borderRadius:10, padding:"9px 11px", fontWeight:700, cursor:"pointer" }}
                 >
                   {plan.name === "Free" ? "Start free" : "Sign in to upgrade"}
                 </button>
@@ -453,21 +462,21 @@ function LandingPage({ onLogin }) {
           </div>
         </section>
 
-        <section id="faq" style={{ background:"#fff", border:"1px solid var(--border-light)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
-          <h3 style={{ margin:"0 0 12px", fontSize:24, color:"#0F172A" }}>You&apos;ve got questions. We&apos;ve got answers.</h3>
+        <section id="faq" style={{ background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)", border:"1px solid var(--border)", borderRadius:16, padding:24, boxShadow:"var(--shadow-sm)" }}>
+          <h3 style={{ margin:"0 0 12px", fontSize:24, color:"var(--text-primary)" }}>You&apos;ve got questions. We&apos;ve got answers.</h3>
           <div style={{ display:"grid", gap:10 }}>
             {[
               ["Do I have to pay to use the app?", "No. You can use core job search, tracking, and document features on the Free plan."],
               ["When should I upgrade?", "Upgrade when you hit free tailoring limits or need more throughput for active application cycles."],
               ["Can I manage my subscription in-app?", "Yes. Premium users can manage billing from the dashboard subscription controls."],
             ].map(([q,a]) => (
-              <div key={q} style={{ border:"1px solid #E2E8F0", borderRadius:10, padding:"10px 12px", background:"#FCFDFF" }}>
-                <div style={{ fontSize:13, fontWeight:800, color:"#1E293B", marginBottom:4 }}>{q}</div>
-                <div style={{ fontSize:13, color:"#475569", lineHeight:1.55 }}>{a}</div>
+              <div key={q} style={{ border:"1px solid var(--border)", borderRadius:10, padding:"10px 12px", background:"var(--surface-2)" }}>
+                <div style={{ fontSize:13, fontWeight:800, color:"var(--text-primary)", marginBottom:4 }}>{q}</div>
+                <div style={{ fontSize:13, color:"var(--text-secondary)", lineHeight:1.55 }}>{a}</div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop:14, fontSize:13, color:"#64748B" }}>
+          <div style={{ marginTop:14, fontSize:13, color:"var(--text-secondary)" }}>
             Need help now? <a href={`mailto:${FEEDBACK_EMAIL}`} style={{ color:"var(--accent)", fontWeight:700 }}>Contact support</a>
           </div>
         </section>
@@ -1040,22 +1049,22 @@ function SH({icon,title}){return <div style={{display:"flex",alignItems:"center"
 function PH({title,subtitle,action}){
   return <div style={{padding:"30px 32px 8px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",flexShrink:0}}>
     <div>
-      <h1 style={{margin:0,fontSize:23,fontWeight:850,color:T.text,letterSpacing:"-0.35px",lineHeight:1.15}}>{title}</h1>
+      <h1 style={{margin:0,fontSize:24,fontWeight:850,color:T.text,letterSpacing:"-0.4px",lineHeight:1.15,fontFamily:"var(--font-display)"}}>{title}</h1>
       {subtitle&&<p style={{margin:"7px 0 0",fontSize:13,color:T.textSub,lineHeight:1.55,maxWidth:520}}>{subtitle}</p>}
     </div>
     {action}
   </div>;
 }
-function Card({children,style:s}){return <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:20,boxShadow:"0 8px 28px rgba(15,23,42,0.04)",...s}}>{children}</div>;}
+function Card({children,style:s}){return <div style={{background:`linear-gradient(180deg, ${T.surface} 0%, ${T.surface2} 100%)`,border:`1px solid ${T.border}`,borderRadius:14,padding:20,boxShadow:"var(--shadow)",...s}}>{children}</div>;}
 function Chip({label,color}){return <span style={{fontSize:12,fontWeight:600,color,background:color+"18",border:`1px solid ${color}30`,borderRadius:20,padding:"3px 11px"}}>{label}</span>;}
 function Spinner({color=T.primary}){return <span style={{display:"inline-block",width:13,height:13,border:`2px solid ${color}30`,borderTopColor:color,borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}}/>;}
 
 function Btn({onClick,children,variant="primary",small,full,disabled,style:s}){
-  const base={cursor:disabled?"not-allowed":"pointer",borderRadius:10,fontWeight:650,transition:"opacity 0.15s, transform 0.15s",display:"inline-flex",alignItems:"center",gap:6,opacity:disabled?0.5:1,border:"none",fontFamily:"inherit",letterSpacing:"0.01em"};
+  const base={cursor:disabled?"not-allowed":"pointer",borderRadius:10,fontWeight:650,transition:"opacity 0.15s, transform 0.15s",display:"inline-flex",alignItems:"center",gap:6,opacity:disabled?0.5:1,border:"none",fontFamily:"inherit",letterSpacing:"0.01em",backdropFilter:"blur(4px)"};
   const v={
-    primary:{background:`linear-gradient(180deg,${T.primary} 0%,${T.primaryDark} 100%)`,color:"#fff",padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,boxShadow:"0 8px 20px rgba(59,111,232,0.26)"},
-    secondary:{background:T.primaryLight,color:T.primary,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.primaryMid}`},
-    ghost:{background:"transparent",color:T.textSub,padding:small?"6px 12px":"9px 16px",fontSize:small?12:13,border:`1px solid ${T.border}`},
+    primary:{background:`linear-gradient(135deg,${T.primary} 0%,${T.primaryDark} 100%)`,color:"#ffffff",padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,boxShadow:"0 10px 28px -10px var(--glow-accent), inset 0 0 0 1px rgba(255,255,255,0.08)"},
+    secondary:{background:T.primaryLight,color:T.text,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.primaryMid}`},
+    ghost:{background:T.surface2,color:T.textSub,padding:small?"6px 12px":"9px 16px",fontSize:small?12:13,border:`1px solid ${T.border}`},
     danger:{background:T.redBg,color:T.red,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.redBorder}`},
     success:{background:T.greenBg,color:T.green,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.greenBorder}`},
     violet:{background:T.violetBg,color:T.violet,padding:small?"6px 14px":"10px 20px",fontSize:small?12:13,border:`1px solid ${T.violetBorder}`},
@@ -1068,19 +1077,19 @@ function AppInput({value,onChange,placeholder,type="text",style:s,...rest}){
   return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} type={type}
     onFocus={()=>setF(true)} onBlur={()=>setF(false)}
     {...rest}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
+    style={{width:"100%",background:T.surface2,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
 }
 
 function TA({value,onChange,placeholder,rows=6,style:s}){
   const [f,setF]=useState(false);
   return <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
     onFocus={()=>setF(true)} onBlur={()=>setF(false)}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"11px 13px",fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.65,transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
+    style={{width:"100%",background:T.surface2,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"11px 13px",fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.65,transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
 }
 
 function Sel({value,onChange,options,style:s}){
   return <select value={value} onChange={e=>onChange(e.target.value)}
-    style={{width:"100%",background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:10,color:value?T.text:T.textMute,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",cursor:"pointer",...s}}>
+    style={{width:"100%",background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,color:value?T.text:T.textMute,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",cursor:"pointer",...s}}>
     {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
   </select>;
 }
@@ -1202,10 +1211,10 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
           left: 0,
           right: 0,
           zIndex: 20,
-          background: "#fff",
+          background: T.surface2,
           border: `1px solid ${T.border}`,
           borderRadius: 10,
-          boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
+          boxShadow: "var(--shadow-lg)",
           maxHeight: 220,
           overflowY: "auto",
         }}>
@@ -1227,7 +1236,7 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
                 width: "100%",
                 textAlign: "left",
                 border: "none",
-                background: m.value === value ? T.primaryLight : "#fff",
+                background: m.value === value ? T.primaryLight : T.surface2,
                 color: T.text,
                 padding: "10px 12px",
                 cursor: "pointer",
@@ -1291,10 +1300,10 @@ function TitleAutocomplete({ value, onChange, placeholder = "Search job title", 
           left: 0,
           right: 0,
           zIndex: 20,
-          background: "#fff",
+          background: T.surface2,
           border: `1px solid ${T.border}`,
           borderRadius: 10,
-          boxShadow: "0 14px 30px rgba(15,23,42,0.12)",
+          boxShadow: "var(--shadow-lg)",
           maxHeight: 220,
           overflowY: "auto",
         }}>
@@ -1316,7 +1325,7 @@ function TitleAutocomplete({ value, onChange, placeholder = "Search job title", 
                 width: "100%",
                 textAlign: "left",
                 border: "none",
-                background: m === value ? T.primaryLight : "#fff",
+                background: m === value ? T.primaryLight : T.surface2,
                 color: T.text,
                 padding: "10px 12px",
                 cursor: "pointer",
@@ -1358,14 +1367,14 @@ function OnboardingFlow({ profile, onSave, onSkip }) {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#EEEDF8", padding: "26px 18px" }}>
-      <div style={{ maxWidth: 540, margin: "0 auto", background: "#fff", border: `1px solid ${T.border}`, borderRadius: 18, boxShadow: "0 18px 34px rgba(15,23,42,0.08)", overflow: "hidden" }}>
+    <div style={{ minHeight: "100vh", background: "transparent", padding: "26px 18px" }}>
+      <div style={{ maxWidth: 540, margin: "0 auto", background: `linear-gradient(180deg, ${T.surface} 0%, ${T.surface2} 100%)`, border: `1px solid ${T.border}`, borderRadius: 18, boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
         <div style={{ padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: T.text }}>Quick Setup</div>
             <div style={{ fontSize: 12, color: T.textSub }}>{step + 1}/3</div>
           </div>
-          <div style={{ height: 4, background: "#EEF2FF", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ height: 4, background: T.surface3, borderRadius: 99, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${((step + 1) / 3) * 100}%`, background: T.primary }} />
           </div>
         </div>
@@ -1386,7 +1395,7 @@ function OnboardingFlow({ profile, onSave, onSkip }) {
               <AppInput value={occupationQuery} onChange={setOccupationQuery} placeholder="Search occupation" />
               <div style={{ marginTop: 10, border: `1px solid ${T.border}`, borderRadius: 10, maxHeight: 200, overflowY: "auto" }}>
                 {occMatches.map((o) => (
-                  <button key={o} type="button" onClick={() => { setOccupation(o); setOccupationQuery(o); }} style={{ width: "100%", textAlign: "left", border: "none", borderBottom: `1px solid ${T.border}`, background: occupation === o ? T.primaryLight : "#fff", padding: "10px 12px", cursor: "pointer", color: T.text, fontSize: 13 }}>
+                  <button key={o} type="button" onClick={() => { setOccupation(o); setOccupationQuery(o); }} style={{ width: "100%", textAlign: "left", border: "none", borderBottom: `1px solid ${T.border}`, background: occupation === o ? T.primaryLight : T.surface2, padding: "10px 12px", cursor: "pointer", color: T.text, fontSize: 13 }}>
                     {o}
                   </button>
                 ))}
@@ -1400,7 +1409,7 @@ function OnboardingFlow({ profile, onSave, onSkip }) {
               <div style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>How far should potential matches be?</div>
               <div style={{ display: "grid", gap: 8 }}>
                 {["30", "50", "100", "200", "any"].map((km) => (
-                  <button key={km} type="button" onClick={() => setDistance(km)} style={{ textAlign: "left", border: `1px solid ${distance === km ? T.primaryMid : T.border}`, borderRadius: 10, background: distance === km ? T.primaryLight : "#fff", padding: "10px 12px", cursor: "pointer", fontSize: 13, color: T.text }}>
+                  <button key={km} type="button" onClick={() => setDistance(km)} style={{ textAlign: "left", border: `1px solid ${distance === km ? T.primaryMid : T.border}`, borderRadius: 10, background: distance === km ? T.primaryLight : T.surface2, padding: "10px 12px", cursor: "pointer", fontSize: 13, color: T.text }}>
                     {km === "any" ? "Doesn't matter" : `${km} km`}
                   </button>
                 ))}
@@ -1432,7 +1441,7 @@ function OnboardingFlow({ profile, onSave, onSkip }) {
 function Toggle({checked,onChange,label}){
   return <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none"}}>
     <div onClick={()=>onChange(!checked)} style={{width:36,height:20,borderRadius:10,background:checked?T.primary:T.border,position:"relative",transition:"background 0.2s",flexShrink:0}}>
-      <div style={{position:"absolute",top:3,left:checked?18:3,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
+      <div style={{position:"absolute",top:3,left:checked?18:3,width:14,height:14,borderRadius:"50%",background:"#f3f6ff",transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
     </div>
     <span style={{fontSize:13,color:T.textSub,fontWeight:500}}>{label}</span>
   </label>;
@@ -1752,6 +1761,13 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
     [jobs]
   );
   const selectedJob = results[selectedJobIdx] || null;
+  const cardTints = [T.primaryLight, T.violetBg, T.greenBg, T.tealBg];
+
+  function formatComp(job) {
+    const raw = job?.compensation;
+    if (!raw || !String(raw).trim()) return "Comp not listed";
+    return String(raw);
+  }
 
   useEffect(() => {
     if (!queryTouched && !query && profileTitle) {
@@ -1883,13 +1899,13 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
           </div>
         )}
 
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1.2fr",gap:12,minHeight:560}}>
+        <div style={{display:"grid",gridTemplateColumns:"1.25fr 1fr",gap:12,minHeight:560}}>
           <Card style={{padding:0,overflow:"hidden"}}>
-            <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(135deg, var(--accent), #818CF8)",color:"#fff"}}>
+            <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(135deg, var(--accent), var(--accent-hover))",color:"#fff"}}>
               <div style={{fontSize:14,fontWeight:700}}>{query || profileTitle || "Search"} in {searchLocation || "Any location"}</div>
               <div style={{fontSize:12,opacity:0.9}}>{results.length} result{results.length===1?"":"s"}</div>
             </div>
-            <div style={{maxHeight:560,overflowY:"auto"}}>
+            <div style={{maxHeight:560,overflowY:"auto",padding:14}}>
               {results.length===0 && (
                 <div style={{padding:20,fontSize:13,color:T.textSub,display:"grid",gap:10}}>
                   <span>Run a search to see job matches.</span>
@@ -1899,19 +1915,72 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
                   </div>
                 </div>
               )}
-              {results.map((job,i)=>{
-                const active = i === selectedJobIdx;
-                return (
-                  <button key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`} type="button" onClick={()=>setSelectedJobIdx(i)} style={{
-                    display:"block",width:"100%",textAlign:"left",border:"none",borderBottom:`1px solid ${T.border}`,padding:"12px 14px",
-                    background:active ? "#EEF4FF" : "#fff",cursor:"pointer"
-                  }}>
-                    <div style={{fontSize:16,fontWeight:750,color:active?T.primary:T.text,marginBottom:3}}>{job.title}</div>
-                    <div style={{fontSize:13,color:T.text,fontWeight:650}}>{job.company}</div>
-                    <div style={{fontSize:12,color:T.textSub,marginTop:2}}>{job.location}</div>
-                  </button>
-                );
-              })}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12}}>
+                {results.map((job,i)=>{
+                  const active = i === selectedJobIdx;
+                  const isSaved = savedJobKeys.has(`${job.title || ""}::${job.company || ""}`);
+                  const tint = cardTints[i % cardTints.length];
+                  return (
+                    <button
+                      key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`}
+                      type="button"
+                      onClick={()=>setSelectedJobIdx(i)}
+                      style={{
+                        border:`1px solid ${active ? T.primary : T.border}`,
+                        borderRadius:16,
+                        background:T.surface,
+                        padding:8,
+                        display:"grid",
+                        gap:0,
+                        textAlign:"left",
+                        cursor:"pointer",
+                        boxShadow:active?"0 10px 24px rgba(63,120,218,0.14)":"var(--shadow-sm)",
+                      }}
+                    >
+                      <div style={{background:tint,border:`1px solid ${T.border}`,borderRadius:12,padding:"10px 12px",minHeight:144,display:"grid",alignContent:"space-between"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
+                          <div style={{fontSize:12,fontWeight:700,color:T.textSub}}>{formatComp(job)}</div>
+                          <button
+                            type="button"
+                            title={isSaved ? "Saved" : "Save job"}
+                            onClick={(e)=>{e.stopPropagation(); if(!isSaved) saveJob(job);}}
+                            style={{
+                              border:`1px solid ${isSaved ? T.greenBorder : T.border}`,
+                              background:isSaved ? T.greenBg : T.surface,
+                              borderRadius:8,
+                              width:28,
+                              height:28,
+                              color:isSaved ? T.green : T.textMute,
+                              cursor:isSaved ? "default" : "pointer",
+                              fontSize:14,
+                            }}
+                          >
+                            {isSaved ? "✓" : "🔖"}
+                          </button>
+                        </div>
+                        <div style={{fontSize:18,fontWeight:800,lineHeight:1.15,color:T.text,marginTop:8,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+                          {job.title || "Untitled Role"}
+                        </div>
+                        <div style={{display:"flex",justifyContent:"flex-end",color:T.textSub,fontSize:20,lineHeight:1}}>
+                          →
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 6px 4px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                          <div style={{width:22,height:22,borderRadius:"50%",background:T.surface3,border:`1px solid ${T.border}`,display:"grid",placeItems:"center",fontSize:11,fontWeight:800,color:T.textSub,flexShrink:0}}>
+                            {(job.company || "?").slice(0,1).toUpperCase()}
+                          </div>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.company || "Unknown Company"}</div>
+                            <div style={{fontSize:11,color:T.textMute,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.location || "Not specified"}</div>
+                          </div>
+                        </div>
+                        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"6px 12px",borderRadius:999,border:`1px solid ${T.border}`,background:T.surface2,color:T.text,fontSize:12,fontWeight:700}}>View</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </Card>
 
@@ -2336,7 +2405,7 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
                     <button key={job.id} onClick={()=>setSelectedTrackerId(job.id)} style={{
                       display:"grid",gridTemplateColumns:"2fr 1.2fr 1.3fr 1fr 1fr",width:"100%",
                       border:"none",borderBottom:`1px solid ${T.border}`,padding:"10px 12px",textAlign:"left",
-                      background:active?T.primaryLight:"#fff",cursor:"pointer",alignItems:"center"
+                      background:active?T.primaryLight:T.surface2,cursor:"pointer",alignItems:"center"
                     }}>
                       <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.title||"—"}</div>
                       <div style={{fontSize:12,color:T.primary,fontWeight:650,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.company||"—"}</div>
@@ -2379,14 +2448,14 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
                         onClick={()=>toggleSection("description")}
                         style={{
                           width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-                          border:"none",background:"#fff",padding:"10px 12px",cursor:"pointer",textAlign:"left",
+                          border:"none",background:T.surface2,padding:"10px 12px",cursor:"pointer",textAlign:"left",
                         }}
                       >
                         <span style={{fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:"0.06em",textTransform:"uppercase"}}>Job Description</span>
                         <span style={{fontSize:14,color:T.textMute}}>{expandedSections.description ? "▾" : "▸"}</span>
                       </button>
                       {expandedSections.description ? (
-                        <div style={{padding:"0 10px 10px",background:"#fff"}}>
+                        <div style={{padding:"0 10px 10px",background:T.surface2}}>
                           <TA
                             value={job.description || ""}
                             onChange={(v)=>setJobs(prev=>prev.map(j=>j.id===job.id?{...j,description:v}:j))}
@@ -2408,14 +2477,14 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
                         onClick={()=>toggleSection("resume")}
                         style={{
                           width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-                          border:"none",background:"#fff",padding:"10px 12px",cursor:"pointer",textAlign:"left",
+                          border:"none",background:T.surface2,padding:"10px 12px",cursor:"pointer",textAlign:"left",
                         }}
                       >
                         <span style={{fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:"0.06em",textTransform:"uppercase"}}>Tailored Resume</span>
                         <span style={{fontSize:14,color:T.textMute}}>{expandedSections.resume ? "▾" : "▸"}</span>
                       </button>
                       {expandedSections.resume ? (
-                        <div style={{padding:"0 10px 10px",background:"#fff"}}>
+                        <div style={{padding:"0 10px 10px",background:T.surface2}}>
                           <div style={{fontSize:12,color:job.tailoredResume?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
                             {job.tailoredResume||<em>Not tailored yet.</em>}
                           </div>
@@ -2429,14 +2498,14 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
                         onClick={()=>toggleSection("cover")}
                         style={{
                           width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-                          border:"none",background:"#fff",padding:"10px 12px",cursor:"pointer",textAlign:"left",
+                          border:"none",background:T.surface2,padding:"10px 12px",cursor:"pointer",textAlign:"left",
                         }}
                       >
                         <span style={{fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:"0.06em",textTransform:"uppercase"}}>Tailored Cover Letter</span>
                         <span style={{fontSize:14,color:T.textMute}}>{expandedSections.cover ? "▾" : "▸"}</span>
                       </button>
                       {expandedSections.cover ? (
-                        <div style={{padding:"0 10px 10px",background:"#fff"}}>
+                        <div style={{padding:"0 10px 10px",background:T.surface2}}>
                           <div style={{fontSize:12,color:job.tailoredCover?T.textSub:T.textMute,background:T.bg,borderRadius:8,padding:"9px 10px",border:`1px solid ${T.border}`,minHeight:52,lineHeight:1.6,whiteSpace:"pre-wrap"}}>
                             {job.tailoredCover||<em>Not tailored yet.</em>}
                           </div>
@@ -2487,8 +2556,8 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
       </div>
 
       {selectedTailorJob && (
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"grid",placeItems:"center",zIndex:50,padding:20}}>
-          <div style={{width:"100%",maxWidth:680,background:"#fff",borderRadius:12,border:`1px solid ${T.border}`,padding:20}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(7,9,14,0.62)",display:"grid",placeItems:"center",zIndex:50,padding:20}}>
+          <div style={{width:"100%",maxWidth:680,background:`linear-gradient(180deg, ${T.surface} 0%, ${T.surface2} 100%)`,borderRadius:12,border:`1px solid ${T.border}`,padding:20,boxShadow:"var(--shadow-lg)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <div>
                 <div style={{fontSize:18,fontWeight:800,color:T.text}}>Tailor Application</div>
@@ -2524,8 +2593,8 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
       )}
 
       {showAddJobModal && (
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"grid",placeItems:"center",zIndex:50,padding:20}}>
-          <div style={{width:"100%",maxWidth:620,background:"#fff",borderRadius:12,border:`1px solid ${T.border}`,padding:20}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(7,9,14,0.62)",display:"grid",placeItems:"center",zIndex:50,padding:20}}>
+          <div style={{width:"100%",maxWidth:620,background:`linear-gradient(180deg, ${T.surface} 0%, ${T.surface2} 100%)`,borderRadius:12,border:`1px solid ${T.border}`,padding:20,boxShadow:"var(--shadow-lg)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <div>
                 <div style={{fontSize:18,fontWeight:800,color:T.text}}>Add Job by URL</div>
@@ -2622,7 +2691,7 @@ function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, b
                   fontWeight:700,
                   fontFamily:"inherit",
                   cursor:"pointer",
-                  background:billingCycle==="monthly" ? T.primary : "#fff",
+                  background:billingCycle==="monthly" ? T.primary : T.surface2,
                   color:billingCycle==="monthly" ? "#fff" : T.textSub,
                 }}
               >
@@ -2638,7 +2707,7 @@ function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, b
                   fontWeight:700,
                   fontFamily:"inherit",
                   cursor:"pointer",
-                  background:billingCycle==="annual" ? T.primary : "#fff",
+                  background:billingCycle==="annual" ? T.primary : T.surface2,
                   color:billingCycle==="annual" ? "#fff" : T.textSub,
                 }}
               >
@@ -2693,14 +2762,14 @@ function AppShell({
   const activeMeta = nav.find((n)=>n.id===active) || nav[0];
 
   return(
-    <div style={{display:"flex",minHeight:"100vh",background:"var(--bg)"}}>
-      <aside style={{width:280,background:T.surface,borderRight:"1px solid var(--border-light)",display:"flex",flexDirection:"column",flexShrink:0}}>
-        <div style={{padding:"28px 24px 20px",borderBottom:"1px solid var(--border-light)"}}>
+    <div style={{display:"flex",minHeight:"100vh",background:"transparent"}}>
+      <aside style={{width:280,background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)",borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column",flexShrink:0}}>
+        <div style={{padding:"28px 24px 20px",borderBottom:"1px solid var(--border)"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:40,height:40,borderRadius:11,background:"linear-gradient(135deg, var(--accent), #818CF8)",display:"grid",placeItems:"center",fontFamily:"Sora, DM Sans, sans-serif",fontSize:18,fontWeight:700,color:"#fff",boxShadow:"0 4px 12px -2px rgba(99, 102, 241, 0.25)"}}>
+            <div style={{width:40,height:40,borderRadius:11,background:"linear-gradient(135deg, var(--accent), var(--accent-hover))",display:"grid",placeItems:"center",fontFamily:"var(--font-display)",fontSize:18,fontWeight:700,color:"#fff",boxShadow:"0 14px 34px -14px var(--glow-accent)"}}>
               J
             </div>
-            <div style={{fontFamily:"Sora, DM Sans, sans-serif",fontSize:17,fontWeight:600,color:T.text}}>Applyify</div>
+            <div style={{fontFamily:"var(--font-display)",fontSize:17,fontWeight:600,color:T.text}}>Applyify</div>
           </div>
         </div>
         <nav style={{display:"flex",flexDirection:"column",gap:6,padding:"22px 14px",flex:1,overflowY:"auto"}}>
@@ -2714,11 +2783,11 @@ function AppShell({
               {active===n.id ? <span style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:24,background:T.primary,borderRadius:"0 2px 2px 0"}}/> : null}
               <span style={{fontSize:16,opacity:active===n.id?1:0.75}}>{n.icon}</span>
               <span style={{flex:1}}>{n.label}</span>
-              {n.disabled && <span style={{fontSize:10,fontWeight:700,color:T.textMute,background:"#F8FAFC",border:`1px solid ${T.border}`,padding:"2px 7px",borderRadius:8}}>Soon</span>}
+              {n.disabled && <span style={{fontSize:10,fontWeight:700,color:T.textMute,background:T.surface3,border:`1px solid ${T.border}`,padding:"2px 7px",borderRadius:8}}>Soon</span>}
             </button>
           ))}
         </nav>
-        <div style={{padding:"16px 20px 20px",borderTop:"1px solid var(--border-light)"}}>
+        <div style={{padding:"16px 20px 20px",borderTop:"1px solid var(--border)"}}>
           <div style={{background:"linear-gradient(135deg, var(--primary), var(--primary-light))",padding:16,borderRadius:12,color:"#fff",marginBottom:10}}>
             <div style={{fontSize:11,fontWeight:700,opacity:0.75,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:5}}>Plan</div>
             <div style={{fontSize:15,fontWeight:700,marginBottom:10}}>{isPremiumSubscription(subscription) ? "Premium Active" : "Free Plan"}</div>
@@ -2745,9 +2814,9 @@ function AppShell({
         </div>
       </aside>
       <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,height:"100vh"}}>
-        <header style={{background:T.surface,borderBottom:"1px solid var(--border-light)",padding:"16px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:40}}>
+        <header style={{background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)",borderBottom:"1px solid var(--border)",padding:"16px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:40}}>
           <div>
-            <div style={{fontSize:20,fontWeight:700,color:T.text,fontFamily:"Sora, DM Sans, sans-serif"}}>{activeMeta.label}</div>
+            <div style={{fontSize:20,fontWeight:700,color:T.text,fontFamily:"var(--font-display)"}}>{activeMeta.label}</div>
             <div style={{fontSize:12,color:T.textSub}}>All core setup complete</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -2756,7 +2825,7 @@ function AppShell({
             </span>
           </div>
         </header>
-        <div style={{flex:1,overflow:"hidden",background:"radial-gradient(circle at 0% 0%, #FFFFFF 0%, var(--bg) 55%)"}}>
+        <div style={{flex:1,overflow:"hidden",background:"transparent"}}>
           {views[active]}
         </div>
       </main>
@@ -2907,7 +2976,7 @@ export default function App(){
 
   if (bootstrappingAuth) {
     return (
-      <div style={{minHeight:"100vh",display:"grid",placeItems:"center",background:T.bg,color:T.textSub,fontFamily:"DM Sans, system-ui, sans-serif"}}>
+      <div style={{minHeight:"100vh",display:"grid",placeItems:"center",background:T.bg,color:T.textSub,fontFamily:"var(--font-body)"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,fontSize:14,fontWeight:600}}>
           <Spinner /> Loading your workspace...
         </div>

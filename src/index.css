@@ -1,26 +1,64 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
 
 :root {
-  /* Design system tokens */
-  --primary: #0A0E27;
-  --primary-light: #1A1F3A;
-  --accent: #6366F1;
-  --accent-hover: #5558E3;
-  --bg: #FAFBFC;
-  --surface: #FFFFFF;
-  --border: #E5E7EB;
-  --border-light: #F3F4F6;
-  --text-primary: #0F172A;
-  --text-secondary: #64748B;
-  --text-tertiary: #94A3B8;
-  --success: #10B981;
-  --warning: #F59E0B;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Sora", "Inter", sans-serif;
 
+  /* Cool night mode: grayscale base + lilac accents */
+  --bg-0: #111215;
+  --bg-1: #17191f;
+  --bg-2: #1f232b;
+  --bg-3: #252a34;
+  --surface: var(--bg-3);
+  --surface-2: #1f232b;
+  --surface-3: #2a2f3a;
+  --bg: var(--bg-1);
+  --border: #3a4150;
+  --border-light: #2f3542;
+
+  /* Primary + supporting accents */
+  --accent: #9f86ff;
+  --accent-hover: #b6a2ff;
+  --accent-soft: rgba(159, 134, 255, 0.14);
+  --accent-soft-border: rgba(159, 134, 255, 0.34);
+  --accent-secondary: #c4b5fd;
+  --accent-secondary-soft: rgba(196, 181, 253, 0.14);
+
+  --text-primary: #eef1f8;
+  --text-secondary: #bcc5d8;
+  --text-tertiary: #8e99b3;
+  --text-inverse: #0f1220;
+
+  /* Semantic colors */
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+  --success-border: rgba(52, 211, 153, 0.36);
+  --warning: #facc15;
+  --warning-soft: rgba(250, 204, 21, 0.14);
+  --warning-border: rgba(250, 204, 21, 0.36);
+  --error: #fb7185;
+  --error-soft: rgba(251, 113, 133, 0.14);
+  --error-border: rgba(251, 113, 133, 0.34);
+  --info: #93c5fd;
+  --info-soft: rgba(147, 197, 253, 0.14);
+  --info-border: rgba(147, 197, 253, 0.34);
+
+  /* Glows and gradients */
+  --glow-accent: rgba(159, 134, 255, 0.30);
+  --glow-hero: rgba(196, 181, 253, 0.22);
+  --gradient-bg-1: radial-gradient(920px 460px at 86% -8%, rgba(159, 134, 255, 0.18), transparent 62%);
+  --gradient-bg-2: radial-gradient(760px 380px at 12% -6%, rgba(147, 197, 253, 0.12), transparent 58%);
+  --gradient-bg-3: linear-gradient(180deg, #17191f 0%, #12141a 58%, #101217 100%);
+
+  --primary: #8f77f0;
+  --primary-light: #a28df5;
+
+  /* Layout scale */
   --radius: 12px;
   --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
-  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.03);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 2px rgba(5, 7, 11, 0.45);
+  --shadow: 0 10px 24px rgba(5, 7, 11, 0.42);
+  --shadow-lg: 0 18px 42px rgba(5, 7, 11, 0.56);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -44,10 +82,36 @@ body,
 
 body {
   min-width: 320px;
-  background: var(--bg);
+  background: var(--gradient-bg-1), var(--gradient-bg-2), var(--gradient-bg-3);
   color: var(--text-primary);
-  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-body);
   line-height: 1.6;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 65% 18%, rgba(159, 134, 255, 0.14), transparent 30%),
+    radial-gradient(circle at 30% 12%, rgba(196, 181, 253, 0.10), transparent 24%);
+  z-index: 0;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 a {
@@ -64,6 +128,11 @@ textarea::placeholder {
   color: var(--text-tertiary);
 }
 
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
 button,
 input,
 textarea,
@@ -75,7 +144,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid #c7d8fa;
+  outline: 2px solid var(--accent-secondary);
   outline-offset: 2px;
 }
 
@@ -84,22 +153,23 @@ button:not(:disabled):hover {
 }
 
 select option {
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--text-primary);
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg);
+  background: #181b22;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: #444c5f;
   border-radius: 99px;
+  border: 2px solid #181b22;
 }
 
 @keyframes spin {
@@ -110,15 +180,15 @@ select option {
 
 /* Reusable patterns */
 .page-title {
-  font-family: "Sora", "DM Sans", sans-serif;
+  font-family: var(--font-display);
   font-size: 32px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.8px;
   color: var(--text-primary);
 }
 
 .section-title {
-  font-family: "Sora", "DM Sans", sans-serif;
+  font-family: var(--font-display);
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.4px;
@@ -127,13 +197,13 @@ select option {
 
 .btn-primary {
   padding: 12px 28px;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover) 62%);
   color: #fff;
   border: none;
   border-radius: 10px;
   font-size: 15px;
   font-weight: 600;
-  box-shadow: 0 4px 12px -2px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 0 0 1px rgba(91, 63, 196, 0.14), 0 10px 24px -8px var(--glow-accent);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
 }
@@ -141,12 +211,12 @@ select option {
 .btn-primary:hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px -2px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 0 1px rgba(91, 63, 196, 0.18), 0 14px 30px -10px var(--glow-accent);
 }
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border-light);
+  background: linear-gradient(180deg, var(--surface) 0%, #212632 100%);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 32px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -156,6 +226,8 @@ select option {
   width: 100%;
   padding: 13px 16px;
   border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
   border-radius: 10px;
   font-size: 15px;
   transition: all 0.2s;
@@ -164,5 +236,5 @@ select option {
 .form-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
