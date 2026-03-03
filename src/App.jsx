@@ -524,6 +524,18 @@ const normalizeJob = (job) => ({
   savedAt: job.savedAt || job.saved_at || job.created_at || null,
   keywords: Array.isArray(job.keywords) ? job.keywords : [],
 });
+
+const normalizeBaseDocument = (doc) => ({
+  ...doc,
+  createdAt: doc.createdAt || doc.created_at || null,
+  updatedAt: doc.updatedAt || doc.updated_at || null,
+});
+
+const normalizeTailoredDocument = (doc) => ({
+  ...doc,
+  createdAt: doc.createdAt || doc.created_at || null,
+  updatedAt: doc.updatedAt || doc.updated_at || null,
+});
 const isMissingRpcError = (error) => {
   const msg = (error?.message || "").toLowerCase();
   return (
@@ -764,6 +776,162 @@ const store = {
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     return row;
+  },
+
+  // DOCUMENTS DASHBOARD (new model)
+  getBaseDocuments: async () => {
+    const { supabase, user } = await getAuthContext();
+    const { data, error } = await supabase
+      .from("base_documents")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    if (error?.code === "42P01") return [];
+    if (error) throw error;
+    return (data || []).map(normalizeBaseDocument);
+  },
+
+  uploadBaseDocument: async ({ file, docType, name }) => {
+    const { supabase, user } = await getAuthContext();
+    const ext = (file?.name?.split(".").pop() || "").toLowerCase();
+    const safeExt = ext || "bin";
+    const docId = crypto.randomUUID();
+    const path = `${user.id}/base/${docId}.${safeExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("documents")
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: file.type || undefined,
+      });
+    if (uploadError) throw uploadError;
+
+    const defaultName = (name || file.name || `${docType}-${new Date().toISOString().slice(0, 10)}`).trim();
+    const { data, error } = await supabase
+      .from("base_documents")
+      .insert({
+        id: docId,
+        user_id: user.id,
+        doc_type: docType,
+        name: defaultName,
+        storage_path: path,
+        mime_type: file.type || null,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return normalizeBaseDocument(data);
+  },
+
+  renameBaseDocument: async (id, name) => {
+    const { supabase, user } = await getAuthContext();
+    const { data, error } = await supabase
+      .from("base_documents")
+      .update({ name })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return normalizeBaseDocument(data);
+  },
+
+  deleteBaseDocument: async (doc) => {
+    const { supabase, user } = await getAuthContext();
+    const { error } = await supabase
+      .from("base_documents")
+      .delete()
+      .eq("id", doc.id)
+      .eq("user_id", user.id);
+    if (error) throw error;
+    if (doc.storage_path) {
+      await supabase.storage.from("documents").remove([doc.storage_path]);
+    }
+  },
+
+  getBaseDocumentDownloadUrl: async (storagePath) => {
+    const { supabase } = await getAuthContext();
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(storagePath, 60);
+    if (error) throw error;
+    return data?.signedUrl || null;
+  },
+
+  getTailoredDocuments: async () => {
+    const { supabase, user } = await getAuthContext();
+    const { data, error } = await supabase
+      .from("tailored_documents")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    if (error?.code === "42P01") return [];
+    if (error) throw error;
+    return (data || []).map(normalizeTailoredDocument);
+  },
+
+  upsertTailoredDocument: async ({ docType, name, jobApplicationId, contentText }) => {
+    const { supabase, user } = await getAuthContext();
+    const { data: existing } = await supabase
+      .from("tailored_documents")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("doc_type", docType)
+      .eq("job_application_id", jobApplicationId || null)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const { data, error } = await supabase
+        .from("tailored_documents")
+        .update({ name, content_text: contentText, updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+        .eq("user_id", user.id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return normalizeTailoredDocument(data);
+    }
+
+    const { data, error } = await supabase
+      .from("tailored_documents")
+      .insert({
+        user_id: user.id,
+        doc_type: docType,
+        name,
+        job_application_id: jobApplicationId || null,
+        content_text: contentText || "",
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return normalizeTailoredDocument(data);
+  },
+
+  refineTailoredDocument: async (tailoredDocumentId, tweakPrompt) => {
+    const { supabase } = await getAuthContext();
+    const { data, error } = await supabase.functions.invoke("refine-document", {
+      body: {
+        tailored_document_id: tailoredDocumentId,
+        tweak_prompt: tweakPrompt,
+      },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  getTweakUsage: async () => {
+    const { supabase, user } = await getAuthContext();
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+    const { data, error } = await supabase
+      .from("tweak_usage")
+      .select("tweaks_used, period_start")
+      .eq("user_id", user.id)
+      .eq("period_start", start)
+      .maybeSingle();
+    if (error?.code === "42P01") return { tweaks_used: 0, limit: 10, period_start: start };
+    if (error) throw error;
+    return { tweaks_used: data?.tweaks_used || 0, limit: 10, period_start: start };
   },
 };
 
@@ -1072,10 +1240,10 @@ function Btn({onClick,children,variant="primary",small,full,disabled,style:s}){
   return <button onClick={disabled?undefined:onClick} style={{...base,...v[variant],...(full?{width:"100%",justifyContent:"center"}:{}),...s}}>{children}</button>;
 }
 
-function AppInput({value,onChange,placeholder,type="text",style:s,...rest}){
+function AppInput({value,onChange,placeholder,type="text",style:s,onFocus,onBlur,...rest}){
   const [f,setF]=useState(false);
   return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} type={type}
-    onFocus={()=>setF(true)} onBlur={()=>setF(false)}
+    onFocus={(e)=>{setF(true);onFocus?.(e);}} onBlur={(e)=>{setF(false);onBlur?.(e);}}
     {...rest}
     style={{width:"100%",background:T.surface2,border:`1.5px solid ${f?T.borderFocus:T.border}`,borderRadius:10,color:T.text,padding:"10px 13px",fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",boxShadow:f?`0 0 0 3px ${T.primaryLight}`:"none",...s}}/>;
 }
@@ -1094,7 +1262,66 @@ function Sel({value,onChange,options,style:s}){
   </select>;
 }
 
-function LocationAutocomplete({ value, onChange, placeholder = "City, state, or country", compact = false }) {
+function Modal({ open, onClose, title, children, width = 720 }) {
+  const [mobile, setMobile] = useState(window.innerWidth < 760);
+  useEffect(() => {
+    const onResize = () => setMobile(window.innerWidth < 760);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{position:"fixed",inset:0,zIndex:80,background:"rgba(7,9,14,0.64)",display:"grid",placeItems:mobile?"end center":"center",padding:mobile?0:16}}
+    >
+      <div
+        onClick={(e)=>e.stopPropagation()}
+        style={{
+          width:mobile?"100%":`min(${width}px, 96vw)`,
+          maxHeight:mobile?"88vh":"90vh",
+          overflowY:"auto",
+          background:`linear-gradient(180deg, ${T.surface} 0%, ${T.surface2} 100%)`,
+          border:`1px solid ${T.border}`,
+          borderRadius:mobile?"18px 18px 0 0":14,
+          boxShadow:"var(--shadow-lg)",
+        }}
+      >
+        <div style={{position:"sticky",top:0,zIndex:3,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,background:`linear-gradient(180deg, ${T.surface} 0%, ${T.surface2} 100%)`}}>
+          <div style={{fontSize:16,fontWeight:800,color:T.text}}>{title}</div>
+          <button onClick={onClose} aria-label="Close" style={{minHeight:44,minWidth:44,border:`1px solid ${T.border}`,background:T.surface3,color:T.text,borderRadius:10,cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+        </div>
+        <div style={{padding:16}}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ToastStack({ toasts, onDismiss }) {
+  return (
+    <div style={{position:"fixed",right:14,bottom:14,zIndex:100,display:"grid",gap:8,maxWidth:320}}>
+      {toasts.map((t) => (
+        <div key={t.id} style={{background:T.surface,border:`1px solid ${t.type==="error"?T.redBorder:T.border}`,color:T.text,padding:"10px 12px",borderRadius:10,boxShadow:"var(--shadow)"}}>
+          <div style={{fontSize:13,fontWeight:700,color:t.type==="error"?T.red:t.type==="success"?T.green:T.text}}>{t.title}</div>
+          {t.message ? <div style={{fontSize:12,color:T.textSub,marginTop:4}}>{t.message}</div> : null}
+          <button onClick={()=>onDismiss(t.id)} style={{marginTop:6,border:"none",background:"transparent",color:T.textMute,cursor:"pointer",fontSize:12,padding:0}}>Dismiss</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LocationAutocomplete({ value, onChange, placeholder = "City, state, or country", compact = false, onKeyDown }) {
   const [open, setOpen] = useState(false);
   const [remoteMatches, setRemoteMatches] = useState([]);
   const [loadingRemote, setLoadingRemote] = useState(false);
@@ -1197,6 +1424,7 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
         value={input}
         onChange={(v) => { onChange(v); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
         onBlur={() => {
           if (input.trim()) onChange(input.trim());
           setTimeout(() => setOpen(false), 80);
@@ -1257,7 +1485,7 @@ function LocationAutocomplete({ value, onChange, placeholder = "City, state, or 
   );
 }
 
-function TitleAutocomplete({ value, onChange, placeholder = "Search job title", compact = false }) {
+function TitleAutocomplete({ value, onChange, placeholder = "Search job title", compact = false, onKeyDown }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const input = value || "";
@@ -1286,6 +1514,7 @@ function TitleAutocomplete({ value, onChange, placeholder = "Search job title", 
         value={input}
         onChange={(v) => { onChange(v); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
         onBlur={() => {
           if (input.trim()) onChange(input.trim());
           setTimeout(() => setOpen(false), 80);
@@ -1447,55 +1676,13 @@ function Toggle({checked,onChange,label}){
   </label>;
 }
 
-function FileUpBtn({onText,label="Upload .txt/.pdf"}){
-  const ref=useRef(); const [loading,setLoading]=useState(false);
-  async function handle(e){
-    const file=e.target.files[0]; if(!file)return; setLoading(true);
-    try{
-      if(file.type==="application/pdf"){
-        const supabase = getSupabaseClient();
-        const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-        const { data: d, error } = await supabase.functions.invoke("anthropic-proxy", {
-          body: {
-            usageType: "extract",
-            model: "claude-sonnet-4-20250514",
-            maxTokens: 3000,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } },
-                { type: "text", text: "Extract and return only the full plain text. No commentary." },
-              ],
-            }],
-          },
-        });
-        if (error) throw error;
-        if (d?.error) throw new Error(d.error);
-        onText(d.content?.map(b=>b.text||"").join("")||"",file.name);
-      }else{onText(await file.text(),file.name);}
-    }catch(err){alert(err?.message || "Could not read file.");}
-    setLoading(false); e.target.value="";
-  }
-  return <><input ref={ref} type="file" accept=".txt,.pdf" onChange={handle} style={{display:"none"}}/>
-    <Btn onClick={()=>ref.current?.click()} variant="ghost" small disabled={loading}>
-      {loading?<><Spinner/> Reading…</>:<>📎 {label}</>}
-    </Btn></>;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROFILE VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProfileView({docs,setDocs,profile,setProfileState}){
+function ProfileView({profile,setProfileState}){
   const [savedMsg,setSavedMsg]=useState("");
   const [profileError,setProfileError]=useState("");
   const [savingProfile,setSavingProfile]=useState(false);
-  const [savingDoc,setSavingDoc]=useState(false);
-  const [docError,setDocError]=useState("");
-  const [showDocForm,setShowDocForm]=useState(false);
-  const [docType,setDocType]=useState("resume");
-  const [docTag,setDocTag]=useState("");
-  const [docContent,setDocContent]=useState("");
-  const [editDocId,setEditDocId]=useState(null);
 
   function up(k,v){setProfileState((p)=>({...p,[k]:v}));}
   async function save(){
@@ -1515,47 +1702,15 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
     }
   }
 
-  async function saveDoc(){
-    if(!docContent.trim()||!docTag.trim())return;
-    setSavingDoc(true);
-    setDocError("");
-    try {
-      if(editDocId){
-        const updated = await store.updateDoc(editDocId,{tag:docTag,content:docContent,type:docType});
-        setDocs(prev=>prev.map(d=>d.id===editDocId?updated:d));
-      } else {
-        const newDoc = await store.insertDoc({type:docType,tag:docTag,content:docContent});
-        setDocs(prev=>[newDoc,...prev]);
-      }
-      setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocType("resume");
-    } catch(e){
-      setDocError(`Error saving document: ${e.message}`);
-    } finally {
-      setSavingDoc(false);
-    }
-  }
-  function startEdit(doc){setEditDocId(doc.id);setDocType(doc.type);setDocTag(doc.tag);setDocContent(doc.content);setShowDocForm(true);}
-  async function delDoc(id){
-    setDocError("");
-    try {
-      await store.deleteDoc(id);
-      setDocs(prev=>prev.filter(d=>d.id!==id));
-    } catch(e){
-      setDocError(`Error deleting document: ${e.message}`);
-    }
-  }
-  function cancelDoc(){setShowDocForm(false);setEditDocId(null);setDocTag("");setDocContent("");setDocError("");}
   const renderField=(lbl,k,ph,type="text")=>(
     <div style={{marginBottom:14}}>
       <FL>{lbl}</FL>
       <AppInput value={profile[k]||""} onChange={v=>up(k,v)} placeholder={ph} type={type}/>
     </div>
   );
-  const resumes=docs.filter(d=>d.type==="resume"); const covers=docs.filter(d=>d.type==="cover_letter");
-
   return(
     <div style={{flex:1,height:"100%",overflowY:"auto",overflowX:"hidden",background:T.bg,minHeight:0}}>
-      <PH title="Profile" subtitle="Personal info, job preferences, and documents."/>
+      <PH title="Profile" subtitle="Personal info and job preferences."/>
       <div style={{padding:"12px 28px 28px",maxWidth:1040,margin:"0 auto"}}>
 
         {profileError&&<div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}>{profileError}</div>}
@@ -1660,77 +1815,354 @@ function ProfileView({docs,setDocs,profile,setProfileState}){
             {savingProfile ? <><Spinner color="#fff"/> Saving…</> : savedMsg ? `✓ ${savedMsg}` : "Save Profile Defaults"}
           </Btn>
         </div>
-
-        <Card>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <SH icon="📄" title="My Documents"/>
-            <Btn onClick={()=>{setShowDocForm(v=>!v);if(showDocForm)cancelDoc();}} variant="secondary" small>{showDocForm?"Cancel":"+ Add Document"}</Btn>
-          </div>
-
-          {docError&&<div style={{fontSize:12,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"8px 12px",marginBottom:12}}>{docError}</div>}
-
-          {showDocForm&&(
-            <div style={{background:T.primaryLight,border:`1px solid ${T.primaryMid}`,borderRadius:10,padding:16,marginBottom:16}}>
-              <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"flex-end"}}>
-                <div style={{minWidth:170}}><FL>Type</FL>
-                  <Sel value={docType} onChange={setDocType} options={[{value:"resume",label:"Resume / CV"},{value:"cover_letter",label:"Cover Letter"}]} style={{width:"100%"}}/>
-                </div>
-                <div style={{flex:1,minWidth:180}}><FL>Label</FL><AppInput value={docTag} onChange={setDocTag} placeholder="e.g. Tech Resume"/></div>
-                <FileUpBtn onText={(text,fn)=>{setDocContent(text);if(!docTag)setDocTag(fn.replace(/\.[^.]+$/,""));}}/>
-              </div>
-              <FL>Document Text</FL>
-              <TA value={docContent} onChange={setDocContent} placeholder="Paste text here..." rows={8}/>
-              <div style={{marginTop:12,display:"flex",gap:8}}>
-                <Btn onClick={saveDoc} disabled={savingDoc}>
-                  {savingDoc ? <><Spinner color="#fff"/> Saving…</> : editDocId?"Update":"Save Document"}
-                </Btn>
-                <Btn onClick={cancelDoc} variant="ghost" disabled={savingDoc}>Cancel</Btn>
-              </div>
-            </div>
-          )}
-
-          {[{list:resumes,icon:"📋",label:"Resumes & CVs"},{list:covers,icon:"✉️",label:"Cover Letters"}].map(({list,icon,label})=>(
-            <div key={label} style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.textSub,marginBottom:8}}>{icon} {label} <span style={{fontWeight:400,color:T.textMute}}>({list.length})</span></div>
-              {list.length===0?<div style={{fontSize:13,color:T.textMute}}>None yet.</div>
-                :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-                  {list.map(doc=>(
-                    <div key={doc.id} style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{doc.tag}</div>
-                        <div style={{display:"flex",gap:4}}><Btn onClick={()=>startEdit(doc)} variant="ghost" small>Edit</Btn><Btn onClick={()=>delDoc(doc.id)} variant="danger" small>✕</Btn></div>
-                      </div>
-                      <div style={{fontSize:11,color:T.textMute,lineHeight:1.5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{doc.content.slice(0,120)}…</div>
-                      <div style={{fontSize:10,color:T.textMute,marginTop:6}}>{formatDate(doc.createdAt || doc.created_at)}</div>
-                    </div>
-                  ))}
-                </div>}
-            </div>
-          ))}
-        </Card>
       </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SUGGESTED ROLES VIEW
+// DOCUMENTS VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function SuggestedView(){
-  return(
-    <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Suggested Jobs" subtitle="Coming soon"/>
-      <div style={{padding:"18px 32px 30px",maxWidth:980,margin:"0 auto"}}>
-        <Card style={{opacity:0.6, borderStyle:"dashed"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontSize:16,fontWeight:750,color:T.text}}>Suggested Jobs</div>
-            <span style={{fontSize:11,fontWeight:700,padding:"4px 8px",borderRadius:999,border:`1px solid ${T.border}`,color:T.textSub}}>Coming Soon</span>
+function DocumentsView({ baseDocs, setBaseDocs, tailoredDocs, setTailoredDocs, jobs, subscription, onToast }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadType, setUploadType] = useState("resume");
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadName, setUploadName] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewText, setPreviewText] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [refineDoc, setRefineDoc] = useState(null);
+  const [refinePrompt, setRefinePrompt] = useState("");
+  const [refineBusy, setRefineBusy] = useState(false);
+  const [usageMeta, setUsageMeta] = useState({ tweaks_used: 0, limit: 10, period_start: null });
+
+  const premium = isPremiumSubscription(subscription);
+  const freeLimitReached = !premium && usageMeta.tweaks_used >= usageMeta.limit;
+  const resumes = baseDocs.filter((d) => d.doc_type === "resume");
+  const covers = baseDocs.filter((d) => d.doc_type === "cover_letter");
+  const tailoredResumes = tailoredDocs.filter((d) => d.doc_type === "tailored_resume");
+  const tailoredCovers = tailoredDocs.filter((d) => d.doc_type === "tailored_cover_letter");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 760);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 760);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const [b, t, usage] = await Promise.all([
+          store.getBaseDocuments(),
+          store.getTailoredDocuments(),
+          store.getTweakUsage(),
+        ]);
+        if (cancelled) return;
+        setBaseDocs(b || []);
+        setTailoredDocs(t || []);
+        setUsageMeta(usage);
+      } catch (e) {
+        if (!cancelled) setError(e?.message || "Could not load documents.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [setBaseDocs, setTailoredDocs]);
+
+  async function handleUpload() {
+    if (!uploadFile) return;
+    const valid = uploadFile.type === "application/pdf" ||
+      uploadFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      uploadFile.name.toLowerCase().endsWith(".pdf") ||
+      uploadFile.name.toLowerCase().endsWith(".docx");
+    if (!valid) {
+      setError("Only PDF and DOCX files are supported.");
+      return;
+    }
+    if (uploadFile.size > 8 * 1024 * 1024) {
+      setError("File must be under 8MB.");
+      return;
+    }
+    setUploading(true);
+    setError("");
+    setUploadProgress(5);
+    const timer = setInterval(() => setUploadProgress((p) => Math.min(92, p + 8)), 180);
+    try {
+      const inserted = await store.uploadBaseDocument({
+        file: uploadFile,
+        docType: uploadType,
+        name: uploadName.trim() || uploadFile.name,
+      });
+      setUploadProgress(100);
+      setBaseDocs((prev) => [inserted, ...prev]);
+      setUploadOpen(false);
+      setUploadFile(null);
+      setUploadName("");
+      onToast?.({ type: "success", title: "Upload complete", message: inserted.name });
+    } catch (e) {
+      setError(e?.message || "Upload failed.");
+      onToast?.({ type: "error", title: "Upload failed", message: e?.message || "" });
+    } finally {
+      clearInterval(timer);
+      setUploading(false);
+      setTimeout(() => setUploadProgress(0), 450);
+    }
+  }
+
+  async function openPreview(doc) {
+    setPreviewDoc(doc);
+    setRenameValue(doc?.name || "");
+    setPreviewText("");
+    setPreviewLoading(true);
+    try {
+      if (doc.content_text) {
+        setPreviewText(doc.content_text);
+      } else if (doc.storage_path && doc.mime_type?.includes("text")) {
+        const url = await store.getBaseDocumentDownloadUrl(doc.storage_path);
+        if (url) {
+          const txt = await fetch(url).then((r) => r.text());
+          setPreviewText(txt);
+        }
+      }
+    } catch {
+      setPreviewText("");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function renamePreviewDoc() {
+    if (!previewDoc || !renameValue.trim()) return;
+    try {
+      const renamed = await store.renameBaseDocument(previewDoc.id, renameValue.trim());
+      setBaseDocs((prev) => prev.map((d) => d.id === renamed.id ? renamed : d));
+      setPreviewDoc(renamed);
+      onToast?.({ type: "success", title: "Renamed", message: renamed.name });
+    } catch (e) {
+      onToast?.({ type: "error", title: "Rename failed", message: e?.message || "" });
+    }
+  }
+
+  async function deleteBaseDoc(doc) {
+    try {
+      await store.deleteBaseDocument(doc);
+      setBaseDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      if (previewDoc?.id === doc.id) setPreviewDoc(null);
+      onToast?.({ type: "success", title: "Deleted", message: doc.name });
+    } catch (e) {
+      onToast?.({ type: "error", title: "Delete failed", message: e?.message || "" });
+    }
+  }
+
+  async function downloadDoc(doc) {
+    try {
+      const url = await store.getBaseDocumentDownloadUrl(doc.storage_path);
+      if (!url) throw new Error("No download URL available");
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      onToast?.({ type: "error", title: "Download failed", message: e?.message || "" });
+    }
+  }
+
+  async function applyRefine() {
+    if (!refineDoc || !refinePrompt.trim()) return;
+    setRefineBusy(true);
+    try {
+      const data = await store.refineTailoredDocument(refineDoc.id, refinePrompt.trim());
+      setTailoredDocs((prev) => prev.map((d) => d.id === refineDoc.id ? { ...d, content_text: data.content_text, updated_at: new Date().toISOString() } : d));
+      setUsageMeta((u) => ({ ...u, tweaks_used: data?.tweaks_used ?? u.tweaks_used }));
+      setRefineDoc((d) => d ? { ...d, content_text: data.content_text } : d);
+      setRefinePrompt("");
+      onToast?.({ type: "success", title: "Refined", message: "Tailored document updated." });
+    } catch (e) {
+      const msg = e?.message || "Refine failed.";
+      onToast?.({ type: "error", title: "Refine failed", message: msg });
+    } finally {
+      setRefineBusy(false);
+    }
+  }
+
+  const docListCard = (title, list) => (
+    <Card style={{ padding: 14 }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: T.text, marginBottom: 8 }}>{title}</div>
+      <div style={{ maxHeight: 260, overflowY: "auto", display: "grid", gap: 8, paddingRight: 2 }}>
+        {list.length === 0 ? (
+          <div style={{ fontSize: 12, color: T.textMute, border:`1px dashed ${T.border}`, borderRadius:10, padding:"10px 12px" }}>No documents yet.</div>
+        ) : list.map((d) => (
+          <div key={d.id} style={{ border:`1px solid ${T.border}`, borderRadius:10, padding:"9px 10px", background:T.surface2 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center" }}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{d.name}</div>
+                <div style={{ fontSize: 11, color: T.textMute }}>Updated {formatDate(d.updatedAt || d.updated_at)}</div>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                <Btn small variant="ghost" onClick={()=>openPreview(d)} style={{minHeight:44}}>View</Btn>
+                {!isMobile ? <Btn small variant="danger" onClick={()=>deleteBaseDoc(d)} style={{minHeight:44}}>Delete</Btn> : null}
+              </div>
+            </div>
           </div>
-          <div style={{fontSize:13,color:T.textSub,lineHeight:1.7}}>
-            This section is intentionally disabled while we stabilize job board search and tailoring quality.
-          </div>
-        </Card>
+        ))}
       </div>
+    </Card>
+  );
+
+  const refinedDocList = (title, list) => (
+    <Card style={{ padding: 14 }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: T.text, marginBottom: 8 }}>{title}</div>
+      <div style={{ maxHeight: 280, overflowY: "auto", display: "grid", gap: 8, paddingRight: 2 }}>
+        {list.length === 0 ? (
+          <div style={{ fontSize: 12, color: T.textMute, border:`1px dashed ${T.border}`, borderRadius:10, padding:"10px 12px" }}>No tailored documents yet. Generate from Tracker first.</div>
+        ) : list.map((d) => {
+          const job = jobs.find((j) => String(j.id) === String(d.job_application_id));
+          const tag = job ? `${job.title || "Role"} · ${job.company || "Company"}` : (d.job_application_id || "No linked job");
+          return (
+            <div key={d.id} style={{ border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 12px", background:T.surface2 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{d.name}</div>
+              <div style={{ fontSize: 11, color: T.textSub, marginTop: 4, display:"inline-block", padding:"3px 8px", borderRadius:999, border:`1px solid ${T.border}`, background:T.surface3 }}>{tag}</div>
+              <div style={{ fontSize: 11, color: T.textMute, marginTop: 4 }}>Created {formatDate(d.createdAt || d.created_at)}</div>
+              <div style={{ display:"flex", gap:8, marginTop: 8, flexWrap:"wrap" }}>
+                <Btn small variant="ghost" onClick={()=>openPreview(d)} style={{minHeight:44}}>View</Btn>
+                <Btn small variant="secondary" onClick={()=>setRefineDoc(d)} style={{minHeight:44}}>Refine</Btn>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+
+  return (
+    <div style={{flex:1,overflow:"auto",background:T.bg}}>
+      <PH title="Documents" subtitle="Store your base documents and manage tailored versions per job." />
+      <div style={{padding:"12px 18px 96px",maxWidth:1220,margin:"0 auto",display:"grid",gap:12}}>
+        {error ? <div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:10,padding:"10px 12px"}}>{error}</div> : null}
+        {loading ? (
+          <div style={{display:"grid",gap:10}}>
+            <Card style={{height:120,opacity:0.7}}><div style={{height:16,width:180,background:T.surface3,borderRadius:6}} /></Card>
+            <Card style={{height:220,opacity:0.7}} />
+          </div>
+        ) : (
+          <>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
+              <Card style={{padding:16}}>
+                <SH icon="📄" title="Add Resume" />
+                <div style={{fontSize:12,color:T.textSub,marginBottom:10}}>Upload a base resume (PDF or DOCX).</div>
+                <Btn onClick={()=>{setUploadType("resume");setUploadOpen(true);}} full style={{minHeight:44}}>Upload Resume</Btn>
+              </Card>
+              <Card style={{padding:16}}>
+                <SH icon="✉️" title="Add Cover Letter" />
+                <div style={{fontSize:12,color:T.textSub,marginBottom:10}}>Upload a base cover letter (PDF or DOCX).</div>
+                <Btn onClick={()=>{setUploadType("cover_letter");setUploadOpen(true);}} variant="secondary" full style={{minHeight:44}}>Upload Cover Letter</Btn>
+              </Card>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
+              {docListCard("Resumes", resumes)}
+              {docListCard("Cover Letters", covers)}
+            </div>
+
+            <Card style={{padding:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:8}}>
+                <div style={{fontSize:15,fontWeight:800,color:T.text}}>Tailored Documents</div>
+                <div style={{fontSize:12,color:freeLimitReached?T.red:T.textSub}}>
+                  Tweak usage this month: <strong style={{color:T.text}}>{premium ? "Unlimited" : `${usageMeta.tweaks_used}/${usageMeta.limit}`}</strong>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
+                {refinedDocList("Tailored Resumes", tailoredResumes)}
+                {refinedDocList("Tailored Cover Letters", tailoredCovers)}
+              </div>
+            </Card>
+          </>
+        )}
+      </div>
+
+      <Modal open={uploadOpen} onClose={()=>!uploading&&setUploadOpen(false)} title={uploadType==="resume"?"Upload Resume":"Upload Cover Letter"} width={560}>
+        <div style={{display:"grid",gap:10}}>
+          <div>
+            <FL>File</FL>
+            <input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e)=>setUploadFile(e.target.files?.[0] || null)} style={{width:"100%",minHeight:44,color:T.text}} />
+          </div>
+          <div>
+            <FL>Name (optional)</FL>
+            <AppInput value={uploadName} onChange={setUploadName} placeholder={uploadFile?.name || "Document name"} />
+          </div>
+          {uploading ? (
+            <div style={{display:"grid",gap:6}}>
+              <div style={{height:8,borderRadius:999,background:T.surface3,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${uploadProgress}%`,background:"linear-gradient(135deg, var(--accent), var(--accent-hover))",transition:"width 0.2s"}} />
+              </div>
+              <div style={{fontSize:12,color:T.textSub}}>Uploading... {uploadProgress}%</div>
+            </div>
+          ) : null}
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+            <Btn variant="ghost" onClick={()=>setUploadOpen(false)} disabled={uploading} style={{minHeight:44}}>Cancel</Btn>
+            <Btn onClick={handleUpload} disabled={uploading || !uploadFile} style={{minHeight:44}}>{uploading ? "Uploading..." : "Upload"}</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!previewDoc} onClose={()=>setPreviewDoc(null)} title={previewDoc?.name || "Document Preview"} width={860}>
+        {previewDoc ? (
+          <div style={{display:"grid",gap:10}}>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto auto auto",gap:8,alignItems:"end"}}>
+              <div>
+                <FL>Rename</FL>
+                <AppInput value={renameValue} onChange={setRenameValue} placeholder="Document name" />
+              </div>
+              <Btn variant="ghost" onClick={renamePreviewDoc} style={{minHeight:44}}>Rename</Btn>
+              {previewDoc.storage_path ? <Btn variant="secondary" onClick={()=>downloadDoc(previewDoc)} style={{minHeight:44}}>Download</Btn> : null}
+              {"storage_path" in previewDoc ? <Btn variant="danger" onClick={()=>deleteBaseDoc(previewDoc)} style={{minHeight:44}}>Delete</Btn> : null}
+            </div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px",background:T.surface2,minHeight:220,maxHeight:420,overflowY:"auto"}}>
+              {previewLoading ? <div style={{fontSize:12,color:T.textSub}}><Spinner /> Loading preview...</div> : (
+                previewText ? <pre style={{margin:0,whiteSpace:"pre-wrap",fontFamily:"inherit",fontSize:13,color:T.text,lineHeight:1.7}}>{previewText}</pre>
+                : <div style={{fontSize:12,color:T.textSub}}>Preview not available for this file type.</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={!!refineDoc} onClose={()=>{setRefineDoc(null);setRefinePrompt("");}} title="Refine Tailored Document" width={860}>
+        {refineDoc ? (
+          <div style={{display:"grid",gap:10}}>
+            <div style={{fontSize:12,color:T.textSub}}>
+              {premium ? "Pro plan: unlimited tweaks." : `Free plan: ${usageMeta.tweaks_used}/${usageMeta.limit} tweaks used this month.`}
+            </div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px",background:T.surface2,minHeight:180,maxHeight:320,overflowY:"auto"}}>
+              <pre style={{margin:0,whiteSpace:"pre-wrap",fontFamily:"inherit",fontSize:13,color:T.text,lineHeight:1.7}}>{refineDoc.content_text || "No content available."}</pre>
+            </div>
+            <div>
+              <FL>What would you like to tweak?</FL>
+              <TA value={refinePrompt} onChange={setRefinePrompt} placeholder="e.g., Make this more concise and metric-driven." rows={3} />
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                {["Make it more concise", "Add metrics", "Emphasize leadership"].map((txt)=>(
+                  <Btn key={txt} small variant="ghost" onClick={()=>setRefinePrompt(txt)} style={{minHeight:44}}>{txt}</Btn>
+                ))}
+              </div>
+            </div>
+            {freeLimitReached ? <div style={{fontSize:12,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"8px 10px"}}>Free plan tweak limit reached. Upgrade to Pro for unlimited refinements.</div> : null}
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+              <Btn variant="ghost" onClick={()=>setRefineDoc(null)} style={{minHeight:44}}>Close</Btn>
+              <Btn onClick={applyRefine} disabled={refineBusy || !refinePrompt.trim() || freeLimitReached} style={{minHeight:44}}>
+                {refineBusy ? "Applying..." : "Apply tweak"}
+              </Btn>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }
@@ -1750,6 +2182,7 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
   const [savingJobKey,setSavingJobKey]=useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 980);
   const profileTitle = (profile?.targetTitle || "").trim();
   const profileSeniority = (profile?.seniority || "").trim();
   const profileIndustry = (profile?.industry || "").trim();
@@ -1761,13 +2194,22 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
     [jobs]
   );
   const selectedJob = results[selectedJobIdx] || null;
-  const cardTints = [T.primaryLight, T.violetBg, T.greenBg, T.tealBg];
+  const activeQueryText = (queryTouched ? query.trim() : (query.trim() || profileTitle)) || "Role";
+  const activeLocationText = locationTouched
+    ? (searchLocation?.trim() || "Any location")
+    : (searchLocation?.trim() || profile?.targetLocation?.trim() || profile?.location?.trim() || "Any location");
 
   function formatComp(job) {
     const raw = job?.compensation;
     if (!raw || !String(raw).trim()) return "Comp not listed";
     return String(raw);
   }
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 980);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     if (!queryTouched && !query && profileTitle) {
@@ -1861,159 +2303,194 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
     finally{setSavingJobKey("");}
   }
 
+  function resetFilters() {
+    setQuery("");
+    setSearchLocation("");
+    setQueryTouched(true);
+    setLocationTouched(true);
+    setWorkMode("all");
+    setDatePosted("all");
+    setError("");
+  }
+
   return(
     <div style={{flex:1,overflow:"auto",background:T.bg}}>
-      <PH title="Job Search" subtitle="Search roles, apply filters, preview details, then save to Tracker."/>
-      <div style={{padding:"12px 28px 28px",maxWidth:1240,margin:"0 auto"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr auto",gap:10,marginBottom:10}}>
-          <TitleAutocomplete value={query} onChange={(v)=>{ setQuery(v); setQueryTouched(true); }} placeholder='e.g. customer success, account manager, frontend engineer' compact
-            onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}/>
-          <LocationAutocomplete value={searchLocation} onChange={(v)=>{ setSearchLocation(v); setLocationTouched(true); }} placeholder="Location" compact />
-          <Btn onClick={search} disabled={loading} style={{height:40,padding:"0 20px"}}>
-            {loading?<><Spinner color="#fff"/> Searching…</>:"Search"}
-          </Btn>
-        </div>
+      <PH
+        title="Job Search"
+        subtitle="Search roles, apply filters, review details, then save jobs to Tracker."
+        action={<Btn variant="ghost" onClick={resetFilters} small>Reset filters</Btn>}
+      />
+      <div style={{padding:"12px 28px 28px",maxWidth:1240,margin:"0 auto",display:"grid",gap:12}}>
+        <Card style={{padding:16}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1.2fr 1fr auto",gap:10,marginBottom:10}}>
+            <div>
+              <FL>Role</FL>
+              <TitleAutocomplete
+                value={query}
+                onChange={(v)=>{ setQuery(v); setQueryTouched(true); }}
+                placeholder="e.g. Data Analyst, Sales Manager, Product Designer"
+                compact
+                onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}
+              />
+            </div>
+            <div>
+              <FL>Location</FL>
+              <LocationAutocomplete
+                value={searchLocation}
+                onChange={(v)=>{ setSearchLocation(v); setLocationTouched(true); }}
+                placeholder="City, province/state, country"
+                compact
+                onKeyDown={(e)=>{ if(e.key==="Enter" && !loading){ search(); } }}
+              />
+            </div>
+            <div style={{display:"grid",alignItems:"end"}}>
+              <Btn onClick={search} disabled={loading} style={{minHeight:44,padding:"0 20px"}}>
+                {loading?<><Spinner color="#fff"/> Searching…</>:"Search Jobs"}
+              </Btn>
+            </div>
+          </div>
 
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
-          <Sel value={workMode} onChange={setWorkMode} options={[
-            { value: "all", label: "Work mode: Any" },
-            { value: "remote", label: "Remote" },
-            { value: "hybrid", label: "Hybrid" },
-            { value: "on-site", label: "On-site" },
-          ]} style={{width:180,padding:"8px 12px",fontSize:13}} />
-          <Sel value={datePosted} onChange={setDatePosted} options={[
-            { value: "all", label: "Date posted: Any time" },
-            { value: "past 24 hours", label: "Past 24 hours" },
-            { value: "past week", label: "Past week" },
-            { value: "past month", label: "Past month" },
-          ]} style={{width:220,padding:"8px 12px",fontSize:13}} />
-          {(profileTitle || profile?.location) && (
-            <span style={{fontSize:12,color:T.textSub}}>Using profile defaults: {profileTitle || "title not set"}{profile?.location ? ` · ${profile.location}` : ""}</span>
-          )}
-        </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <Sel value={workMode} onChange={setWorkMode} options={[
+              { value: "all", label: "Work mode: Any" },
+              { value: "remote", label: "Remote" },
+              { value: "hybrid", label: "Hybrid" },
+              { value: "on-site", label: "On-site" },
+            ]} style={{width:190,padding:"8px 12px",fontSize:13}} />
+            <Sel value={datePosted} onChange={setDatePosted} options={[
+              { value: "all", label: "Date posted: Any time" },
+              { value: "past 24 hours", label: "Past 24 hours" },
+              { value: "past week", label: "Past week" },
+              { value: "past month", label: "Past month" },
+            ]} style={{width:220,padding:"8px 12px",fontSize:13}} />
+            {(profileTitle || profile?.location) && (
+              <span style={{fontSize:12,color:T.textSub}}>
+                Defaults from Profile: {profileTitle || "title not set"}{profile?.location ? ` · ${profile.location}` : ""}
+              </span>
+            )}
+          </div>
+        </Card>
 
         {error&&(
-          <div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+          <div style={{fontSize:13,color:T.red,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:8,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
             <span>{error}</span>
             <Btn small variant="ghost" onClick={search}>Retry</Btn>
           </div>
         )}
 
-        <div style={{display:"grid",gridTemplateColumns:"1.25fr 1fr",gap:12,minHeight:560}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1.05fr 1fr",gap:12,minHeight:560}}>
           <Card style={{padding:0,overflow:"hidden"}}>
             <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(135deg, var(--accent), var(--accent-hover))",color:"#fff"}}>
-              <div style={{fontSize:14,fontWeight:700}}>{query || profileTitle || "Search"} in {searchLocation || "Any location"}</div>
-              <div style={{fontSize:12,opacity:0.9}}>{results.length} result{results.length===1?"":"s"}</div>
+              <div style={{fontSize:14,fontWeight:800}}>{activeQueryText} in {activeLocationText}</div>
+              <div style={{fontSize:12,opacity:0.92}}>{results.length} result{results.length===1?"":"s"} · Select a row to preview</div>
             </div>
-            <div style={{maxHeight:560,overflowY:"auto",padding:14}}>
-              {results.length===0 && (
-                <div style={{padding:20,fontSize:13,color:T.textSub,display:"grid",gap:10}}>
-                  <span>Run a search to see job matches.</span>
+            <div style={{maxHeight:560,overflowY:"auto",padding:12}}>
+              {loading ? (
+                <div style={{padding:16,fontSize:13,color:T.textSub,display:"flex",alignItems:"center",gap:8}}>
+                  <Spinner /> Finding matches...
+                </div>
+              ) : results.length===0 ? (
+                <div style={{padding:16,fontSize:13,color:T.textSub,display:"grid",gap:10}}>
+                  <span>No jobs yet. Try broader terms or run search with defaults.</span>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                     <Btn small variant="secondary" onClick={search}>Search with defaults</Btn>
                     {jobs.length > 0 ? <Btn small variant="ghost" onClick={()=>onNavigate?.("tracker")}>Go to Tracker</Btn> : null}
                   </div>
                 </div>
-              )}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12}}>
-                {results.map((job,i)=>{
-                  const active = i === selectedJobIdx;
-                  const isSaved = savedJobKeys.has(`${job.title || ""}::${job.company || ""}`);
-                  const tint = cardTints[i % cardTints.length];
-                  return (
-                    <button
-                      key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`}
-                      type="button"
-                      onClick={()=>setSelectedJobIdx(i)}
-                      style={{
-                        border:`1px solid ${active ? T.primary : T.border}`,
-                        borderRadius:16,
-                        background:T.surface,
-                        padding:8,
-                        display:"grid",
-                        gap:0,
-                        textAlign:"left",
-                        cursor:"pointer",
-                        boxShadow:active?"0 10px 24px rgba(63,120,218,0.14)":"var(--shadow-sm)",
-                      }}
-                    >
-                      <div style={{background:tint,border:`1px solid ${T.border}`,borderRadius:12,padding:"10px 12px",minHeight:144,display:"grid",alignContent:"space-between"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
-                          <div style={{fontSize:12,fontWeight:700,color:T.textSub}}>{formatComp(job)}</div>
-                          <button
-                            type="button"
-                            title={isSaved ? "Saved" : "Save job"}
-                            onClick={(e)=>{e.stopPropagation(); if(!isSaved) saveJob(job);}}
-                            style={{
-                              border:`1px solid ${isSaved ? T.greenBorder : T.border}`,
-                              background:isSaved ? T.greenBg : T.surface,
-                              borderRadius:8,
-                              width:28,
-                              height:28,
-                              color:isSaved ? T.green : T.textMute,
-                              cursor:isSaved ? "default" : "pointer",
-                              fontSize:14,
-                            }}
-                          >
-                            {isSaved ? "✓" : "🔖"}
-                          </button>
-                        </div>
-                        <div style={{fontSize:18,fontWeight:800,lineHeight:1.15,color:T.text,marginTop:8,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
-                          {job.title || "Untitled Role"}
-                        </div>
-                        <div style={{display:"flex",justifyContent:"flex-end",color:T.textSub,fontSize:20,lineHeight:1}}>
-                          →
-                        </div>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 6px 4px"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-                          <div style={{width:22,height:22,borderRadius:"50%",background:T.surface3,border:`1px solid ${T.border}`,display:"grid",placeItems:"center",fontSize:11,fontWeight:800,color:T.textSub,flexShrink:0}}>
-                            {(job.company || "?").slice(0,1).toUpperCase()}
-                          </div>
+              ) : (
+                <div style={{display:"grid",gap:8}}>
+                  {results.map((job,i)=>{
+                    const active = i === selectedJobIdx;
+                    const isSaved = savedJobKeys.has(`${job.title || ""}::${job.company || ""}`);
+                    return (
+                      <button
+                        key={`${job.title || "job"}-${job.company || "company"}-${job.apply_url || i}`}
+                        type="button"
+                        onClick={()=>setSelectedJobIdx(i)}
+                        style={{
+                          border:`1px solid ${active ? T.primary : T.border}`,
+                          borderRadius:12,
+                          background:active ? T.primaryLight : T.surface2,
+                          padding:"10px 12px",
+                          display:"grid",
+                          gap:6,
+                          textAlign:"left",
+                          cursor:"pointer",
+                        }}
+                      >
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
                           <div style={{minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.company || "Unknown Company"}</div>
-                            <div style={{fontSize:11,color:T.textMute,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.location || "Not specified"}</div>
+                            <div style={{fontSize:15,fontWeight:800,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {job.title || "Untitled Role"}
+                            </div>
+                            <div style={{fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {job.company || "Unknown Company"} · {job.location || "Not specified"}
+                            </div>
+                          </div>
+                          <div style={{display:"flex",alignItems:"start",gap:6,flexShrink:0}}>
+                            <span style={{fontSize:11,fontWeight:700,color:T.textMute,border:`1px solid ${T.border}`,borderRadius:999,padding:"3px 8px"}}>
+                              {formatComp(job)}
+                            </span>
+                            <button
+                              type="button"
+                              title={isSaved ? "Saved" : "Save job"}
+                              onClick={(e)=>{e.stopPropagation(); if(!isSaved) saveJob(job);}}
+                              style={{
+                                border:`1px solid ${isSaved ? T.greenBorder : T.border}`,
+                                background:isSaved ? T.greenBg : T.surface,
+                                borderRadius:8,
+                                minWidth:32,
+                                height:32,
+                                color:isSaved ? T.green : T.textMute,
+                                cursor:isSaved ? "default" : "pointer",
+                                fontSize:14,
+                              }}
+                            >
+                              {isSaved ? "✓" : "🔖"}
+                            </button>
                           </div>
                         </div>
-                        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"6px 12px",borderRadius:999,border:`1px solid ${T.border}`,background:T.surface2,color:T.text,fontSize:12,fontWeight:700}}>View</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                          <Chip label={workMode === "all" ? "Any mode" : workMode} color={T.teal} />
+                          <Chip label={job.source || "jsearch"} color={T.violet} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </Card>
 
           <Card style={{padding:18}}>
-            {!selectedJob && (
-              <div style={{fontSize:14,color:T.textSub}}>Select a job to preview details.</div>
-            )}
-            {selectedJob && (() => {
+            {!selectedJob ? (
+              <div style={{fontSize:14,color:T.textSub}}>Select a job from results to preview details and save it.</div>
+            ) : (() => {
               const isSaved = savedJobKeys.has(`${selectedJob.title || ""}::${selectedJob.company || ""}`);
               const jobKey = `${selectedJob.title}::${selectedJob.company}`;
               const saving = savingJobKey === jobKey;
               return (
                 <>
-                  <div style={{fontSize:13,color:T.textSub,marginBottom:8}}>Company</div>
+                  <div style={{fontSize:13,color:T.textSub,marginBottom:6}}>Job Preview</div>
                   <div style={{fontSize:22,fontWeight:800,lineHeight:1.2,color:T.text,letterSpacing:"-0.3px",marginBottom:4}}>{selectedJob.title}</div>
-                  <div style={{fontSize:15,color:T.text,fontWeight:700,marginBottom:4}}>{selectedJob.company}</div>
-                  <div style={{fontSize:16,color:T.textSub,marginBottom:12}}>{selectedJob.location}</div>
+                  <div style={{fontSize:15,color:T.text,fontWeight:700,marginBottom:2}}>{selectedJob.company}</div>
+                  <div style={{fontSize:14,color:T.textSub,marginBottom:10}}>{selectedJob.location || "Not specified"}</div>
                   <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
                     <Chip label={workMode === "all" ? "Any work mode" : workMode} color={T.teal} />
                     <Chip label={datePosted === "all" ? "Any date" : datePosted} color={T.amber} />
                     <Chip label={selectedJob.source || "jsearch"} color={T.violet} />
                   </div>
-                  <div style={{display:"flex",gap:8,marginBottom:14}}>
-                    <Btn onClick={()=>saveJob(selectedJob)} disabled={isSaved || saving} variant={isSaved ? "success" : "secondary"}>
-                      {saving ? <><Spinner/> Saving…</> : isSaved ? "✓ Saved" : "Save"}
+                  <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+                    <Btn onClick={()=>saveJob(selectedJob)} disabled={isSaved || saving} variant={isSaved ? "success" : "secondary"} style={{minHeight:44}}>
+                      {saving ? <><Spinner/> Saving…</> : isSaved ? "✓ Saved to Tracker" : "Save to Tracker"}
                     </Btn>
                     {selectedJob.apply_url && (
-                      <a href={selectedJob.apply_url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 16px",border:`1px solid ${T.border}`,borderRadius:10,color:T.text,textDecoration:"none",fontSize:13,fontWeight:650}}>
-                        View Listing
+                      <a href={selectedJob.apply_url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 16px",border:`1px solid ${T.border}`,borderRadius:10,color:T.text,textDecoration:"none",fontSize:13,fontWeight:650,minHeight:44}}>
+                        Open Listing
                       </a>
                     )}
                   </div>
-                  <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,maxHeight:300,overflowY:"auto",paddingRight:4}}>
+                  <div style={{fontSize:13,color:T.textSub,lineHeight:1.7,maxHeight:isMobile?260:420,overflowY:"auto",paddingRight:4,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px",background:T.surface2}}>
                     {selectedJob.description || "No description provided by source."}
                   </div>
                 </>
@@ -2029,7 +2506,7 @@ function SearchView({jobs,setJobs,profile,onNavigate}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRACKER VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
+function TrackerView({jobs,setJobs,docs,subscription,onNavigate,setTailoredDocs}){
   const [filterStatus,setFilterStatus]=useState("all");
   const [sortBy,setSortBy]=useState("date");
   const [trackerMsg,setTrackerMsg]=useState("");
@@ -2306,6 +2783,43 @@ function TrackerView({jobs,setJobs,docs,subscription,onNavigate}){
       };
       const dbRow = await store.updateJob(selectedTailorJob.id, updates);
       setJobs((prev) => prev.map((j) => (j.id === selectedTailorJob.id ? { ...j, ...dbRow } : j)));
+      const tailoredWrites = [];
+      if (updates.tailoredResume) {
+        tailoredWrites.push(
+          store.upsertTailoredDocument({
+            docType: "tailored_resume",
+            name: `${selectedTailorJob.title || "Role"} - Tailored Resume`,
+            jobApplicationId: selectedTailorJob.id,
+            contentText: updates.tailoredResume,
+          })
+        );
+      }
+      if (updates.tailoredCover) {
+        tailoredWrites.push(
+          store.upsertTailoredDocument({
+            docType: "tailored_cover_letter",
+            name: `${selectedTailorJob.title || "Role"} - Tailored Cover Letter`,
+            jobApplicationId: selectedTailorJob.id,
+            contentText: updates.tailoredCover,
+          })
+        );
+      }
+      if (tailoredWrites.length) {
+        try {
+          const persisted = (await Promise.all(tailoredWrites)).filter(Boolean);
+          if (persisted.length && setTailoredDocs) {
+            setTailoredDocs((prev) => {
+              const byId = new Map(prev.map((doc) => [doc.id, doc]));
+              persisted.forEach((doc) => byId.set(doc.id, doc));
+              return Array.from(byId.values()).sort((a, b) =>
+                toISO(b.updated_at || b.created_at || "").localeCompare(toISO(a.updated_at || a.created_at || ""))
+              );
+            });
+          }
+        } catch {
+          // Non-blocking: tailoring output on job still succeeds.
+        }
+      }
       if (!premiumActive) {
         const refreshedQuota = await store.getTailoringQuota();
         setQuota(refreshedQuota);
@@ -2742,28 +3256,43 @@ function SettingsView({ subscription, onUpgrade, onManageBilling, billingBusy, b
 function AppShell({
   docs,setDocs,jobs,setJobs,userName,onLogout,profile,setProfileState,
   subscription,onUpgrade,onManageBilling,billingBusy,billingError,
+  baseDocs,setBaseDocs,tailoredDocs,setTailoredDocs,onToast,
 }){
   const [active,setActive]=useState("profile");
+  const [mobile,setMobile]=useState(window.innerWidth < 980);
+  useEffect(() => {
+    const onResize = () => setMobile(window.innerWidth < 980);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const nav=[
     {id:"profile",   icon:"👤", label:"Profile"},
-    {id:"suggested", icon:"🧭", label:"Suggested Jobs", disabled:true},
+    {id:"documents", icon:"📁", label:"Documents"},
     {id:"search",    icon:"🔍", label:"Job Search"},
     {id:"tracker",   icon:"📊", label:"Tracker"},
     {id:"settings",  icon:"⚙️", label:"Settings"},
   ];
 
   const views={
-    profile:   <ProfileView   docs={docs} setDocs={setDocs} profile={profile} setProfileState={setProfileState}/>,
-    suggested: <SuggestedView />,
+    profile:   <ProfileView profile={profile} setProfileState={setProfileState}/>,
+    documents: <DocumentsView baseDocs={baseDocs} setBaseDocs={setBaseDocs} tailoredDocs={tailoredDocs} setTailoredDocs={setTailoredDocs} jobs={jobs} subscription={subscription} onToast={onToast} />,
     search:    <SearchView    jobs={jobs} setJobs={setJobs} profile={profile} onNavigate={setActive}/>,
-    tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs} subscription={subscription} onNavigate={setActive}/>,
+    tracker:   <TrackerView   jobs={jobs} setJobs={setJobs} docs={docs} subscription={subscription} onNavigate={setActive} setTailoredDocs={setTailoredDocs} />,
     settings:  <SettingsView  subscription={subscription} onUpgrade={onUpgrade} onManageBilling={onManageBilling} billingBusy={billingBusy} billingError={billingError} userName={userName} />,
   };
   const activeMeta = nav.find((n)=>n.id===active) || nav[0];
 
   return(
-    <div style={{display:"flex",minHeight:"100vh",background:"transparent"}}>
-      <aside style={{width:280,background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)",borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column",flexShrink:0}}>
+    <div style={{display:"flex",minHeight:"100vh",background:"transparent",paddingBottom:mobile?76:0}}>
+      <aside style={{
+        width:280,
+        background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)",
+        borderRight:"1px solid var(--border)",
+        display:mobile?"none":"flex",
+        flexDirection:"column",
+        flexShrink:0,
+      }}>
         <div style={{padding:"28px 24px 20px",borderBottom:"1px solid var(--border)"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:40,height:40,borderRadius:11,background:"linear-gradient(135deg, var(--accent), var(--accent-hover))",display:"grid",placeItems:"center",fontFamily:"var(--font-display)",fontSize:18,fontWeight:700,color:"#fff",boxShadow:"0 14px 34px -14px var(--glow-accent)"}}>
@@ -2813,7 +3342,7 @@ function AppShell({
           </div>
         </div>
       </aside>
-      <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,height:"100vh"}}>
+      <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,minHeight:"100vh"}}>
         <header style={{background:"linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%)",borderBottom:"1px solid var(--border)",padding:"16px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:40}}>
           <div>
             <div style={{fontSize:20,fontWeight:700,color:T.text,fontFamily:"var(--font-display)"}}>{activeMeta.label}</div>
@@ -2829,6 +3358,42 @@ function AppShell({
           {views[active]}
         </div>
       </main>
+      {mobile ? (
+        <nav style={{
+          position:"fixed",
+          left:0,
+          right:0,
+          bottom:0,
+          zIndex:90,
+          padding:"8px 8px calc(8px + env(safe-area-inset-bottom))",
+          background:"linear-gradient(180deg, rgba(18,20,24,0.92) 0%, rgba(16,18,23,0.98) 100%)",
+          borderTop:`1px solid ${T.border}`,
+          backdropFilter:"blur(8px)",
+          display:"grid",
+          gridTemplateColumns:`repeat(${nav.length}, minmax(0,1fr))`,
+          gap:6,
+        }}>
+          {nav.map((n)=>(
+            <button key={n.id} onClick={()=>setActive(n.id)} style={{
+              minHeight:48,
+              border:`1px solid ${active===n.id ? T.primaryMid : T.border}`,
+              background:active===n.id ? T.primaryLight : T.surface2,
+              borderRadius:10,
+              color:active===n.id ? T.primary : T.textSub,
+              fontSize:11,
+              fontWeight:700,
+              fontFamily:"inherit",
+              display:"grid",
+              placeItems:"center",
+              gap:2,
+              cursor:"pointer",
+            }}>
+              <span style={{fontSize:14,lineHeight:1}}>{n.icon}</span>
+              <span>{n.label}</span>
+            </button>
+          ))}
+        </nav>
+      ) : null}
     </div>
   );
 }
@@ -2842,23 +3407,38 @@ export default function App(){
   const [userName,setUserName]=useState("");
   const [userId,setUserId]=useState("");
   const [docs,setDocs]=useState([]);
+  const [baseDocs,setBaseDocs]=useState([]);
+  const [tailoredDocs,setTailoredDocs]=useState([]);
   const [jobs,setJobs]=useState([]);
   const [profile,setProfileState]=useState({ name: "" });
   const [subscription,setSubscription]=useState(null);
   const [billingBusy,setBillingBusy]=useState(false);
   const [billingError,setBillingError]=useState("");
+  const [toasts,setToasts]=useState([]);
+
+  function addToast({ type = "info", title, message }) {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setToasts((prev) => [...prev, { id, type, title, message }].slice(-4));
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3600);
+  }
 
   // Load data from Supabase after login
   async function loadData(){
     try{
-      const [d,j,p,s]=await Promise.all([
+      const [d,j,p,s,b,t]=await Promise.all([
         store.getDocs(),
         store.getJobs(),
         store.getProfile(),
         store.getSubscription(),
+        store.getBaseDocuments().catch(() => []),
+        store.getTailoredDocuments().catch(() => []),
       ]);
       setDocs(d||[]);
       setJobs(j||[]);
+      setBaseDocs(b||[]);
+      setTailoredDocs(t||[]);
       setProfileState((prev) => ({
         ...prev,
         ...(p || {}),
@@ -2964,6 +3544,8 @@ export default function App(){
       console.error("Error signing out:", e);
     } finally {
       setDocs([]);
+      setBaseDocs([]);
+      setTailoredDocs([]);
       setJobs([]);
       setProfileState({ name: "" });
       setSubscription(null);
@@ -3010,7 +3592,13 @@ export default function App(){
         onManageBilling={handleManageBilling}
         billingBusy={billingBusy}
         billingError={billingError}
+        baseDocs={baseDocs}
+        setBaseDocs={setBaseDocs}
+        tailoredDocs={tailoredDocs}
+        setTailoredDocs={setTailoredDocs}
+        onToast={addToast}
       />
+      <ToastStack toasts={toasts} onDismiss={(id)=>setToasts((prev)=>prev.filter((t)=>t.id!==id))} />
     </>
   );
 }

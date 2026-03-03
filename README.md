@@ -87,3 +87,59 @@ supabase functions deploy stripe-webhook --no-verify-jwt
 
 6. Subscribe to these Stripe events:
    `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`.
+
+## Documents Dashboard Setup (Base + Tailored Docs)
+
+1. Run the migration:
+
+```bash
+-- in Supabase SQL Editor
+-- run file: supabase/migrations/20260303_documents_dashboard.sql
+```
+
+This migration creates:
+- `base_documents`
+- `tailored_documents`
+- `tweak_usage` (monthly free-plan tweak limits)
+- private storage bucket `documents`
+- RLS + storage policies
+- RPC `consume_tweak_usage(limit, is_pro)`
+
+2. Deploy refine function:
+
+```bash
+supabase functions deploy refine-document
+```
+
+3. Ensure secrets are set in Supabase:
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+4. Vercel env vars required for frontend:
+
+```bash
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+### Tweak Limit Rules
+
+- Free plan: `10` tweaks per month
+- Premium (`billing_subscriptions.status` in `active`, `trialing`): unlimited tweaks
+- Enforcement happens in `refine-document` edge function (server-side)
+
+### Manual Test Checklist
+
+1. Login and confirm top-level nav includes `Documents` (and no `Suggested Jobs` tab).
+2. On mobile width, confirm bottom nav appears and taps switch views.
+3. Documents tab:
+   - Upload resume/cover letter (`.pdf`, `.docx`)
+   - Rename, download, delete base documents
+   - Confirm empty states when no docs exist
+4. Generate tailoring in Tracker, then confirm entries appear in `Tailored Documents`.
+5. Open a tailored doc and run `Refine` with a prompt.
+6. Free account: after 10 monthly tweaks, confirm refine returns upgrade/limit message.
+7. Premium account: confirm refine remains available without limit block.
